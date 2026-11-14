@@ -504,7 +504,7 @@ function doPost(e) {
       const STORAGE_KEY = 'hk_wedding_cam_v9';
       const EMBEDDED_GAS_URL = 'https://script.google.com/macros/s/AKfycbzrH0twxkYxtvb_bu2LanqU6743ygzcT0V517ofT0Ff2T5nV7MpXuBR7P13_cL__d4M/exec';
 
-      const DEFAULT_CONFIG = {
+const DEFAULT_CONFIG = {
         gasWebAppUrl: EMBEDDED_GAS_URL,
         adminPin: '051226',
         guestAccessKey: '',
@@ -547,13 +547,8 @@ function doPost(e) {
           }
         } catch (err) {}
 
-        // Always sync to the verified embedded Google Apps Script URL unless manually overridden in this version
-        if (!localStorage.getItem(STORAGE_KEY)) {
-          state.gasWebAppUrl = EMBEDDED_GAS_URL;
-        }
-        if (!state.gasWebAppUrl || !state.gasWebAppUrl.trim()) {
-          state.gasWebAppUrl = EMBEDDED_GAS_URL;
-        }
+        // Paksa semua browser tamu memakai URL prefilled terbaru dari GitHub
+        state.gasWebAppUrl = EMBEDDED_GAS_URL;
 
         const params = new URLSearchParams(window.location.search);
         const urlGuest = params.get('guest');
@@ -1578,12 +1573,14 @@ function doPost(e) {
         uploadMomentToDrive(entry);
       }
 
-      function blobToBase64(blob) {
+function blobToBase64(blob) {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
-            const result = reader.result || '';
-            resolve(String(result).split(',')[1] || '');
+            const str = String(reader.result || '');
+            const marker = ';base64,';
+            const idx = str.indexOf(marker);
+            resolve(idx !== -1 ? str.slice(idx + marker.length) : (str.split(',').pop() || ''));
           };
           reader.onerror = reject;
           reader.readAsDataURL(blob);
@@ -1614,7 +1611,7 @@ function doPost(e) {
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify({
                   filename: item.filename,
-                  mimeType: item.mimeType,
+                  mimeType: (item.mimeType || 'application/octet-stream').split(';')[0],
                   folderType: item.variant === 'clean' ? 'Clean' : 'Framed',
                   variant: item.variant,
                   guestName: entry.guestName,
