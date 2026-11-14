@@ -1246,10 +1246,10 @@
 
       function getSupportedVideoMime() {
         const candidates = [
-          'video/mp4;codecs=avc1',
+          'video/mp4;codecs=avc1,mp4a.40.2',
           'video/mp4',
+          'video/mp4;codecs=avc1',
           'video/webm;codecs=h264,opus',
-          'video/webm;codecs=h264',
           'video/webm;codecs=vp9,opus',
           'video/webm;codecs=vp8,opus',
           'video/webm'
@@ -1337,7 +1337,7 @@
           const { seq, framedFilename, cleanFilename } = nextCaptureNames('video', ext);
 
           // Video asli langsung dikirim ke folder "Original (No Frame)" di Google Drive
-          // Versi ber-frame akan dirender mulus saat tamu menekan "Save Framed" di Moments
+          // Versi ber-frame akan dirender mulus dengan audio penuh saat tamu menekan "Save Framed" di Moments
           registerAndUploadDualMoment({
             mediaType: 'video',
             seq,
@@ -1389,7 +1389,7 @@
         }
       }
 
-      // ON-DEMAND POST-CAPTURE VIDEO FRAMER (Berjalan setelah kamera berhenti merekam)
+      // ON-DEMAND POST-CAPTURE VIDEO FRAMER (Dengan Web Audio API agar audio terekam penuh di HP)
       const renderingVideoIds = new Set();
 
       async function renderAndDownloadFramedVideo(momentId, btnEl) {
@@ -1413,10 +1413,20 @@
         }
         showToast('Applying frame to your video (1x playback)...');
 
+        let audioCtx = null;
         try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            audioCtx = new AudioContextClass();
+            if (audioCtx.state === 'suspended') {
+              await audioCtx.resume();
+            }
+          }
+
           const offVideo = document.createElement('video');
           offVideo.src = mem.clean.url;
-          offVideo.muted = true;
+          offVideo.muted = false;
+          offVideo.volume = 1.0;
           offVideo.playsInline = true;
           offVideo.preload = 'auto';
 
@@ -1434,12 +1444,22 @@
           getFrameOverlayCanvas(frameId);
 
           const stream = rCanvas.captureStream(30);
-          try {
-            const vidStream = offVideo.captureStream ? offVideo.captureStream() : (offVideo.mozCaptureStream ? offVideo.mozCaptureStream() : null);
-            if (vidStream) {
-              vidStream.getAudioTracks().forEach((t) => stream.addTrack(t));
-            }
-          } catch (audioErr) {}
+
+          if (audioCtx) {
+            try {
+              const sourceNode = audioCtx.createMediaElementSource(offVideo);
+              const destNode = audioCtx.createMediaStreamDestination();
+              sourceNode.connect(destNode);
+              destNode.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
+            } catch (audioErr) {}
+          } else {
+            try {
+              const vidStream = offVideo.captureStream ? offVideo.captureStream() : (offVideo.mozCaptureStream ? offVideo.mozCaptureStream() : null);
+              if (vidStream) {
+                vidStream.getAudioTracks().forEach((t) => stream.addTrack(t));
+              }
+            } catch (audioErr) {}
+          }
 
           const mimeType = getSupportedVideoMime();
           const chunks = [];
@@ -1498,6 +1518,9 @@
           showToast('Framed render unsupported on this browser — downloading original');
           downloadFileObject(mem.clean);
         } finally {
+          if (audioCtx) {
+            try { await audioCtx.close(); } catch (e) {}
+          }
           renderingVideoIds.delete(momentId);
           if (btnEl) {
             btnEl.disabled = false;
