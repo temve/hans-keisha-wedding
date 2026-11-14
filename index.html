@@ -168,7 +168,6 @@
 
         <!-- UNIFIED SHUTTER ROW: GALLERY | TAP PHOTO / HOLD VIDEO | MOMENTS -->
         <div class="w-full max-w-[340px] flex items-center justify-between px-2">
-          <!-- Left: Gallery -->
           <button id="btn-open-gallery" type="button" class="btn-press flex flex-col items-center gap-1 text-[#FFFFFF]">
             <div class="w-12 h-12 rounded-2xl bg-[#181615]/85 backdrop-blur-md border border-[#B8AFA4]/45 flex items-center justify-center">
               <svg class="w-5 h-5 text-[#FFFFFF]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -180,7 +179,6 @@
             <span class="text-[10px] font-medium tracking-wide text-[#B8AFA4]">Gallery</span>
           </button>
 
-          <!-- Center: Unified Tap-for-Photo / Press-and-Hold-for-Video Shutter (Anti-Select Protected) -->
           <div class="flex flex-col items-center gap-1.5 no-select-touch" oncontextmenu="return false;">
             <div
               id="btn-unified-shutter"
@@ -197,7 +195,6 @@
             </span>
           </div>
 
-          <!-- Right: Moments Drawer -->
           <button id="btn-open-moments" type="button" class="btn-press relative flex flex-col items-center gap-1 text-[#FFFFFF]">
             <div class="relative w-12 h-12 rounded-2xl bg-[#181615]/85 backdrop-blur-md border border-[#B8AFA4]/45 overflow-hidden flex items-center justify-center">
               <img id="moments-thumb-preview" src="" alt="" class="hidden w-full h-full object-cover" />
@@ -214,7 +211,7 @@
       </footer>
     </div>
 
-    <!-- Toast Notification Banner (Multi-line Safe on Mobile) -->
+    <!-- Toast Notification Banner -->
     <div id="toast-banner" class="pointer-events-none hidden absolute top-20 left-1/2 -translate-x-1/2 z-50 w-max max-w-[90%] bg-[#FFFFFF] text-[#564F4C] border border-[#B8AFA4] px-4 py-2 rounded-2xl shadow-xl text-xs font-semibold text-center whitespace-normal leading-snug"></div>
   </div>
 
@@ -457,42 +454,6 @@
           </div>
 
           <button id="btn-save-drive-settings" type="button" class="btn-press w-full h-11 rounded-xl bg-[#564F4C] text-[#FFFFFF] text-xs font-semibold">Save Host Configuration</button>
-
-          <div class="pt-2 border-t border-[#B8AFA4]/40 space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-[#564F4C]">Google Apps Script (Dual-Folder Auto-Sorter)</span>
-              <button id="btn-copy-gas-script" type="button" class="btn-press px-2.5 py-1 rounded-lg bg-[#B8AFA4] text-[#FFFFFF] text-[11px] font-semibold">Copy Script</button>
-            </div>
-            <pre id="gas-script-code" class="p-3 rounded-xl bg-[#181615] text-[#FFFFFF] text-[10px] leading-relaxed overflow-x-auto font-mono select-all">var ROOT_FOLDER_ID = "1I4W8RKcONbghSC6GDfFcV-S5V0rnS6tv";
-
-function doPost(e) {
-  try {
-    var data = JSON.parse(e.postData.contents);
-    var cleanBase64 = data.base64Data.indexOf(",") !== -1
-      ? data.base64Data.split(",")[1]
-      : data.base64Data;
-
-    var rootFolder = DriveApp.getFolderById(ROOT_FOLDER_ID);
-    var subName = (data.folderType === "Clean" || data.variant === "clean")
-      ? "Original (No Frame)"
-      : "Framed";
-    var folders = rootFolder.getFoldersByName(subName);
-    var targetFolder = folders.hasNext() ? folders.next() : rootFolder.createFolder(subName);
-
-    var bytes = Utilities.base64Decode(cleanBase64);
-    var blob = Utilities.newBlob(bytes, data.mimeType, data.filename);
-    var file = targetFolder.createFile(blob);
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: "success", fileId: file.getId(), name: file.getName() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}</pre>
-          </div>
         </div>
       </div>
     </div>
@@ -501,10 +462,14 @@ function doPost(e) {
   <!-- APPLICATION LOGIC -->
   <script>
     (() => {
-      const STORAGE_KEY = 'hk_wedding_cam_v9';
+      // =========================================================================
+      // GANTI TEKS DI DALAM TANDA KUTIP DI BAWAH INI DENGAN URL /exec TERBARU ANDA:
       const EMBEDDED_GAS_URL = 'https://script.google.com/macros/s/AKfycbzrH0twxkYxtvb_bu2LanqU6743ygzcT0V517ofT0Ff2T5nV7MpXuBR7P13_cL__d4M/exec';
+      // =========================================================================
 
-const DEFAULT_CONFIG = {
+      const STORAGE_KEY = 'hk_wedding_cam_v10';
+
+      const DEFAULT_CONFIG = {
         gasWebAppUrl: EMBEDDED_GAS_URL,
         adminPin: '051226',
         guestAccessKey: '',
@@ -519,6 +484,7 @@ const DEFAULT_CONFIG = {
         videoCount: 0,
         moments: [],
         gasWebAppUrl: DEFAULT_CONFIG.gasWebAppUrl,
+        lastEmbeddedUrl: EMBEDDED_GAS_URL,
         adminPin: DEFAULT_CONFIG.adminPin,
         guestAccessKey: DEFAULT_CONFIG.guestAccessKey,
         dualUpload: DEFAULT_CONFIG.dualUpload,
@@ -533,9 +499,9 @@ const DEFAULT_CONFIG = {
         try {
           const raw =
             localStorage.getItem(STORAGE_KEY) ||
+            localStorage.getItem('hk_wedding_cam_v9') ||
             localStorage.getItem('hk_wedding_cam_v8') ||
-            localStorage.getItem('hk_wedding_cam_v7') ||
-            localStorage.getItem('hk_wedding_cam_v6');
+            localStorage.getItem('hk_wedding_cam_v7');
           if (raw) {
             const parsed = JSON.parse(raw);
             state = { ...state, ...parsed };
@@ -547,8 +513,13 @@ const DEFAULT_CONFIG = {
           }
         } catch (err) {}
 
-        // Paksa semua browser tamu memakai URL prefilled terbaru dari GitHub
-        state.gasWebAppUrl = EMBEDDED_GAS_URL;
+        // Otomatis perbarui URL semua perangkat tamu setiap kali EMBEDDED_GAS_URL diubah di GitHub
+        if (EMBEDDED_GAS_URL && !EMBEDDED_GAS_URL.startsWith('PASTE_')) {
+          if (state.lastEmbeddedUrl !== EMBEDDED_GAS_URL || !state.gasWebAppUrl) {
+            state.gasWebAppUrl = EMBEDDED_GAS_URL;
+            state.lastEmbeddedUrl = EMBEDDED_GAS_URL;
+          }
+        }
 
         const params = new URLSearchParams(window.location.search);
         const urlGuest = params.get('guest');
@@ -647,47 +618,45 @@ const DEFAULT_CONFIG = {
         toggleDualUpload: document.getElementById('toggle-dual-upload'),
         inputQrAccessKey: document.getElementById('input-qr-access-key'),
         inputNewAdminPin: document.getElementById('input-new-admin-pin'),
-        btnSaveDriveSettings: document.getElementById('btn-save-drive-settings'),
-        btnCopyGasScript: document.getElementById('btn-copy-gas-script'),
-        gasScriptCode: document.getElementById('gas-script-code')
+        btnSaveDriveSettings: document.getElementById('btn-save-drive-settings')
       };
 
-      // FULL HD 1080p (1080x1920) PHOTO PIPELINE + 720p HD VIDEO PIPELINE
+      // FULL HD 1080p PHOTO PIPELINE + HARDWARE-ACCELERATED 720p 30FPS VIDEO PIPELINE
       const PHOTO_W = 1080;
       const PHOTO_H = 1920;
+      const VID_W = 720;
+      const VID_H = 1280;
 
       const canvas = els.canvas;
       canvas.width = PHOTO_W;
       canvas.height = PHOTO_H;
       const ctx = canvas.getContext('2d');
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
 
       const cleanCanvas = document.createElement('canvas');
       cleanCanvas.width = PHOTO_W;
       cleanCanvas.height = PHOTO_H;
       const cleanCtx = cleanCanvas.getContext('2d');
-      cleanCtx.imageSmoothingEnabled = true;
-      cleanCtx.imageSmoothingQuality = 'high';
 
       const captureFramedCanvas = document.createElement('canvas');
       captureFramedCanvas.width = PHOTO_W;
       captureFramedCanvas.height = PHOTO_H;
       const captureFramedCtx = captureFramedCanvas.getContext('2d');
-      captureFramedCtx.imageSmoothingEnabled = true;
-      captureFramedCtx.imageSmoothingQuality = 'high';
 
-      // Single 720p HD (720x1280) video canvas for reliable, fast Drive uploads
       const videoRecordCanvas = document.createElement('canvas');
-      videoRecordCanvas.width = 720;
-      videoRecordCanvas.height = 1280;
+      videoRecordCanvas.width = VID_W;
+      videoRecordCanvas.height = VID_H;
       const videoRecordCtx = videoRecordCanvas.getContext('2d');
-      videoRecordCtx.imageSmoothingEnabled = true;
-      videoRecordCtx.imageSmoothingQuality = 'high';
 
-      let cachedPlainFullFrame = null;
+      // Offscreen Pre-Cached Static Frame Overlays (Zero per-frame lag)
+      const frameOverlayCache = {};
       let loadedCustomLogoImg = null;
       let loadedCustomFullFrameImg = null;
+
+      function invalidateFrameCache() {
+        delete frameOverlayCache['logo-frame'];
+        delete frameOverlayCache['polaroid'];
+        delete frameOverlayCache['full-frame'];
+      }
 
       let mediaStream = null;
       let facingMode = 'user';
@@ -716,8 +685,9 @@ const DEFAULT_CONFIG = {
           audio: true,
           video: {
             facingMode: { ideal: facingMode },
-            width: { ideal: 2560, max: 3840 },
-            height: { ideal: 1440, max: 2160 }
+            width: { ideal: 1920, max: 2560 },
+            height: { ideal: 1080, max: 1440 },
+            frameRate: { ideal: 30, max: 60 }
           }
         };
 
@@ -748,8 +718,9 @@ const DEFAULT_CONFIG = {
               audio: false,
               video: {
                 facingMode: { ideal: facingMode },
-                width: { ideal: 2560, max: 3840 },
-                height: { ideal: 1440, max: 2160 }
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+                frameRate: { ideal: 30 }
               }
             });
             isDemoCamera = false;
@@ -777,58 +748,42 @@ const DEFAULT_CONFIG = {
         targetCtx.fillStyle = grad;
         targetCtx.fillRect(0, 0, w, h);
 
-        const glowX = w * 0.5 + Math.sin(t * 0.0008) * 90;
-        const glowY = h * 0.42 + Math.cos(t * 0.0006) * 60;
-        const radial = targetCtx.createRadialGradient(glowX, glowY, 40, glowX, glowY, 540);
+        const glowX = w * 0.5 + Math.sin(t * 0.0008) * (w * 0.08);
+        const glowY = h * 0.42 + Math.cos(t * 0.0006) * (h * 0.03);
+        const radial = targetCtx.createRadialGradient(glowX, glowY, 20, glowX, glowY, w * 0.5);
         radial.addColorStop(0, 'rgba(184, 175, 164, 0.25)');
         radial.addColorStop(1, 'rgba(24, 22, 21, 0)');
         targetCtx.fillStyle = radial;
         targetCtx.fillRect(0, 0, w, h);
 
+        const s = w / 1080;
         targetCtx.save();
         targetCtx.textAlign = 'center';
         targetCtx.fillStyle = 'rgba(255, 255, 255, 0.72)';
-        targetCtx.font = '600 32px "Montserrat", sans-serif';
+        targetCtx.font = `600 ${Math.round(32 * s)}px "Montserrat", sans-serif`;
         targetCtx.fillText('LIVE CAMERA PREVIEW', w / 2, h * 0.47);
         targetCtx.fillStyle = 'rgba(184, 175, 164, 0.85)';
-        targetCtx.font = '400 27px "Plus Jakarta Sans", sans-serif';
+        targetCtx.font = `400 ${Math.round(27 * s)}px "Plus Jakarta Sans", sans-serif`;
         targetCtx.fillText('Grant camera permission or upload from Gallery', w / 2, h * 0.505);
         targetCtx.restore();
       }
 
-      function drawCameraSourceOntoCanvas(targetCtx, vid, w, h) {
+      function drawVideoToBox(targetCtx, vid, dstX, dstY, dstW, dstH) {
         const vw = vid.videoWidth;
         const vh = vid.videoHeight;
-        const targetRatio = w / h;
+        const targetRatio = dstW / dstH;
         const sourceRatio = vw / vh;
-
-        targetCtx.imageSmoothingEnabled = true;
-        targetCtx.imageSmoothingQuality = 'high';
 
         if (state.wideAngleMode) {
           targetCtx.fillStyle = '#181615';
-          targetCtx.fillRect(0, 0, w, h);
-
-          targetCtx.save();
-          targetCtx.filter = 'blur(26px) brightness(0.45)';
-          let bgSx = 0, bgSy = 0, bgSw = vw, bgSh = vh;
-          if (sourceRatio > targetRatio) {
-            bgSw = vh * targetRatio;
-            bgSx = (vw - bgSw) / 2;
-          } else {
-            bgSh = vw / targetRatio;
-            bgSy = (vh - bgSh) / 2;
+          targetCtx.fillRect(dstX, dstY, dstW, dstH);
+          let drawW = dstW;
+          let drawH = dstW / sourceRatio;
+          if (drawH > dstH) {
+            drawH = dstH;
+            drawW = dstH * sourceRatio;
           }
-          targetCtx.drawImage(vid, bgSx, bgSy, bgSw, bgSh, 0, 0, w, h);
-          targetCtx.restore();
-
-          let drawW = w;
-          let drawH = w / sourceRatio;
-          if (drawH > h) {
-            drawH = h;
-            drawW = h * sourceRatio;
-          }
-          targetCtx.drawImage(vid, 0, 0, vw, vh, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
+          targetCtx.drawImage(vid, 0, 0, vw, vh, dstX + (dstW - drawW) / 2, dstY + (dstH - drawH) / 2, drawW, drawH);
         } else {
           let sx = 0, sy = 0, sW = vw, sH = vh;
           if (sourceRatio > targetRatio) {
@@ -838,47 +793,86 @@ const DEFAULT_CONFIG = {
             sH = vw / targetRatio;
             sy = (vh - sH) / 2;
           }
-          targetCtx.drawImage(vid, sx, sy, sW, sH, 0, 0, w, h);
+          targetCtx.drawImage(vid, sx, sy, sW, sH, dstX, dstY, dstW, dstH);
+        }
+      }
+
+      // Render a complete frame (video or image source + cached static frame overlay) in 2 fast drawImage calls
+      function renderSceneWithFrame(targetCtx, w, h, frameId, drawSourceFn) {
+        const s = w / 1080;
+        if (frameId === 'polaroid') {
+          const sidePad = Math.round(64 * s);
+          const topPad = Math.round(215 * s);
+          const bottomPad = Math.round(310 * s);
+          const innerW = w - sidePad * 2;
+          const innerH = h - topPad - bottomPad;
+          drawSourceFn(targetCtx, sidePad, topPad, innerW, innerH);
+        } else {
+          drawSourceFn(targetCtx, 0, 0, w, h);
+        }
+
+        if (frameId && frameId !== 'without-frame') {
+          const overlay = getFrameOverlayCanvas(frameId);
+          if (overlay) {
+            targetCtx.drawImage(overlay, 0, 0, w, h);
+          }
         }
       }
 
       function startRenderLoop() {
         function renderTick(now) {
-          const w = canvas.width;
-          const h = canvas.height;
-
-          cleanCtx.clearRect(0, 0, w, h);
           const vid = els.sourceVideo;
           const hasLiveVideo = !isDemoCamera && vid && vid.readyState >= 2 && vid.videoWidth > 0 && vid.videoHeight > 0;
 
-          if (hasLiveVideo) {
-            drawCameraSourceOntoCanvas(cleanCtx, vid, w, h);
-          } else {
-            drawStudioDemoBackdrop(cleanCtx, w, h, now || 0);
-          }
-
-          captureFramedCtx.clearRect(0, 0, w, h);
-          captureFramedCtx.drawImage(cleanCanvas, 0, 0, w, h);
-          compositeSelectedFrame(captureFramedCtx, w, h, state.activeFrame);
-
           if (isRecording) {
-            videoRecordCtx.clearRect(0, 0, 720, 1280);
-            videoRecordCtx.drawImage(
-              state.activeFrame === 'without-frame' ? cleanCanvas : captureFramedCanvas,
-              0, 0, 720, 1280
-            );
-          }
+            // FAST PATH DURING VIDEO RECORDING: Single 720p pass for smooth 30 FPS
+            const drawRecSource = (tCtx, dx, dy, dw, dh) => {
+              if (hasLiveVideo) {
+                drawVideoToBox(tCtx, vid, dx, dy, dw, dh);
+              } else {
+                drawStudioDemoBackdrop(tCtx, VID_W, VID_H, now || 0);
+              }
+            };
 
-          ctx.clearRect(0, 0, w, h);
-          if (hasLiveVideo && facingMode === 'user') {
-            ctx.save();
-            ctx.translate(w, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(cleanCanvas, 0, 0, w, h);
-            ctx.restore();
-            compositeSelectedFrame(ctx, w, h, state.activeFrame);
+            renderSceneWithFrame(videoRecordCtx, VID_W, VID_H, state.activeFrame, drawRecSource);
+
+            // Mirror only the live video area on front camera preview while keeping frame un-mirrored
+            ctx.clearRect(0, 0, PHOTO_W, PHOTO_H);
+            if (hasLiveVideo && facingMode === 'user') {
+              renderSceneWithFrame(ctx, PHOTO_W, PHOTO_H, state.activeFrame, (tCtx, dx, dy, dw, dh) => {
+                tCtx.save();
+                tCtx.translate(dx + dw, dy);
+                tCtx.scale(-1, 1);
+                drawVideoToBox(tCtx, vid, 0, 0, dw, dh);
+                tCtx.restore();
+              });
+            } else {
+              ctx.drawImage(videoRecordCanvas, 0, 0, PHOTO_W, PHOTO_H);
+            }
           } else {
-            ctx.drawImage(captureFramedCanvas, 0, 0, w, h);
+            // IDLE / PHOTO-READY PATH (Full 1080x1920)
+            if (hasLiveVideo) {
+              drawVideoToBox(cleanCtx, vid, 0, 0, PHOTO_W, PHOTO_H);
+            } else {
+              drawStudioDemoBackdrop(cleanCtx, PHOTO_W, PHOTO_H, now || 0);
+            }
+
+            renderSceneWithFrame(captureFramedCtx, PHOTO_W, PHOTO_H, state.activeFrame, (tCtx, dx, dy, dw, dh) => {
+              tCtx.drawImage(cleanCanvas, 0, 0, PHOTO_W, PHOTO_H, dx, dy, dw, dh);
+            });
+
+            ctx.clearRect(0, 0, PHOTO_W, PHOTO_H);
+            if (hasLiveVideo && facingMode === 'user') {
+              renderSceneWithFrame(ctx, PHOTO_W, PHOTO_H, state.activeFrame, (tCtx, dx, dy, dw, dh) => {
+                tCtx.save();
+                tCtx.translate(dx + dw, dy);
+                tCtx.scale(-1, 1);
+                tCtx.drawImage(cleanCanvas, 0, 0, PHOTO_W, PHOTO_H, 0, 0, dw, dh);
+                tCtx.restore();
+              });
+            } else {
+              ctx.drawImage(captureFramedCanvas, 0, 0, PHOTO_W, PHOTO_H);
+            }
           }
 
           renderLoopId = requestAnimationFrame(renderTick);
@@ -887,7 +881,7 @@ const DEFAULT_CONFIG = {
         renderLoopId = requestAnimationFrame(renderTick);
       }
 
-      // WEDDING TWIBBON / FRAME RENDERING (4 STRICT OPTIONS)
+      // PRE-CACHED STATIC FRAME OVERLAY BUILDERS
       function drawIntertwinedHKMonogram(targetCtx, cx, cy, targetHeight, color) {
         const scale = targetHeight / 175;
         targetCtx.save();
@@ -912,158 +906,133 @@ const DEFAULT_CONFIG = {
           const aspect = loadedCustomLogoImg.naturalWidth / loadedCustomLogoImg.naturalHeight;
           const drawH = targetHeight;
           const drawW = drawH * aspect;
-          targetCtx.save();
           targetCtx.drawImage(loadedCustomLogoImg, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
-          targetCtx.restore();
         } else {
           drawIntertwinedHKMonogram(targetCtx, cx, cy, targetHeight, color);
         }
       }
 
-      // PLAIN SOLID COLOR PALETTE FULL FRAME (#B8AFA4 Taupe + #564F4C Espresso + #FFFFFF)
-      function buildPlainPaletteFullFrame(w, h) {
-        const s = w / 1080;
+      function getFrameOverlayCanvas(frameId) {
+        if (!frameId || frameId === 'without-frame') return null;
+        if (frameOverlayCache[frameId]) return frameOverlayCache[frameId];
+
+        const w = PHOTO_W;
+        const h = PHOTO_H;
         const off = document.createElement('canvas');
         off.width = w;
         off.height = h;
         const c = off.getContext('2d');
 
-        const winX = Math.round(w * 0.095);
-        const winY = Math.round(h * 0.135);
-        const winW = Math.round(w * 0.81);
-        const winH = Math.round(h * 0.775);
-
-        c.fillStyle = '#B8AFA4';
-        c.fillRect(0, 0, w, h);
-
-        c.strokeStyle = '#564F4C';
-        c.lineWidth = Math.round(3 * s);
-        c.strokeRect(Math.round(28 * s), Math.round(28 * s), w - Math.round(56 * s), h - Math.round(56 * s));
-
-        c.clearRect(winX, winY, winW, winH);
-
-        c.strokeStyle = '#564F4C';
-        c.lineWidth = Math.round(5 * s);
-        c.strokeRect(winX, winY, winW, winH);
-
-        c.save();
-        c.textAlign = 'center';
-        c.fillStyle = '#564F4C';
-
-        c.font = `600 ${Math.round(21 * s)}px "Montserrat", sans-serif`;
-        c.fillText('THE HOLY MATRIMONY OF', w / 2, Math.round(92 * s));
-
-        c.font = `600 ${Math.round(86 * s)}px "Cormorant Garamond", Georgia, serif`;
-        c.fillText('HANS', w * 0.305, Math.round(186 * s));
-        c.fillText('KEISHA', w * 0.695, Math.round(186 * s));
-
-        c.font = `italic 500 ${Math.round(36 * s)}px "Cormorant Garamond", Georgia, serif`;
-        c.fillText('and', w * 0.485, Math.round(178 * s));
-
-        const botY = winY + winH;
-        const dateY = botY + Math.round(58 * s);
-        c.font = `600 ${Math.round(22 * s)}px "Montserrat", sans-serif`;
-        c.fillText('SATURDAY, 05 DECEMBER 2026', w / 2, dateY);
-
-        const tagText = '#HANSweredprayerofKEI';
-        c.font = `italic 600 ${Math.round(26 * s)}px "Cormorant Garamond", Georgia, serif`;
-        const tagW = c.measureText(tagText).width + Math.round(52 * s);
-        const tagH = Math.round(42 * s);
-        const tagY = dateY + Math.round(20 * s);
-
-        c.fillStyle = '#FFFFFF';
-        c.fillRect(w / 2 - tagW / 2, tagY, tagW, tagH);
-        c.strokeStyle = '#564F4C';
-        c.lineWidth = Math.round(2 * s);
-        c.strokeRect(w / 2 - tagW / 2, tagY, tagW, tagH);
-
-        c.fillStyle = '#564F4C';
-        c.fillText(tagText, w / 2, tagY + Math.round(29 * s));
-        c.restore();
-
-        return off;
-      }
-
-      function compositeSelectedFrame(targetCtx, w, h, frameId) {
-        if (!frameId || frameId === 'without-frame') return;
-        const s = w / 1080;
-
         if (frameId === 'logo-frame') {
-          targetCtx.save();
-          const topShade = targetCtx.createLinearGradient(0, 0, 0, 320 * s);
+          const topShade = c.createLinearGradient(0, 0, 0, 320);
           topShade.addColorStop(0, 'rgba(0, 0, 0, 0.36)');
           topShade.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          targetCtx.fillStyle = topShade;
-          targetCtx.fillRect(0, 0, w, 320 * s);
+          c.fillStyle = topShade;
+          c.fillRect(0, 0, w, 320);
 
-          targetCtx.strokeStyle = 'rgba(255, 255, 255, 0.88)';
-          targetCtx.lineWidth = 5 * s;
-          targetCtx.strokeRect(42 * s, 42 * s, w - 84 * s, h - 84 * s);
+          c.strokeStyle = 'rgba(255, 255, 255, 0.88)';
+          c.lineWidth = 5;
+          c.strokeRect(42, 42, w - 84, h - 84);
 
-          targetCtx.strokeStyle = 'rgba(184, 175, 164, 0.72)';
-          targetCtx.lineWidth = 2 * s;
-          targetCtx.strokeRect(56 * s, 56 * s, w - 112 * s, h - 112 * s);
+          c.strokeStyle = 'rgba(184, 175, 164, 0.72)';
+          c.lineWidth = 2;
+          c.strokeRect(56, 56, w - 112, h - 112);
 
-          targetCtx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-          targetCtx.shadowBlur = 18 * s;
-          drawLogoMark(targetCtx, w / 2, 168 * s, 122 * s, '#FFFFFF');
+          c.shadowColor = 'rgba(0, 0, 0, 0.55)';
+          c.shadowBlur = 18;
+          drawLogoMark(c, w / 2, 168, 122, '#FFFFFF');
 
-          targetCtx.textAlign = 'center';
-          targetCtx.fillStyle = '#FFFFFF';
-          targetCtx.font = `600 ${Math.round(22 * s)}px "Montserrat", sans-serif`;
-          targetCtx.fillText('05 . 12 . 2026', w / 2, 258 * s);
-          targetCtx.restore();
-          return;
-        }
-
-        if (frameId === 'polaroid') {
-          const sidePad = Math.round(64 * s);
-          const topPad = Math.round(215 * s);
-          const bottomPad = Math.round(310 * s);
+          c.textAlign = 'center';
+          c.fillStyle = '#FFFFFF';
+          c.font = '600 22px "Montserrat", sans-serif';
+          c.fillText('05 . 12 . 2026', w / 2, 258);
+        } else if (frameId === 'polaroid') {
+          const sidePad = 64;
+          const topPad = 215;
+          const bottomPad = 310;
           const innerW = w - sidePad * 2;
           const innerH = h - topPad - bottomPad;
 
-          const temp = document.createElement('canvas');
-          temp.width = w;
-          temp.height = h;
-          temp.getContext('2d').drawImage(targetCtx.canvas, 0, 0);
+          c.fillStyle = '#FFFFFF';
+          c.fillRect(0, 0, w, h);
+          c.clearRect(sidePad, topPad, innerW, innerH);
 
-          targetCtx.save();
-          targetCtx.fillStyle = '#FFFFFF';
-          targetCtx.fillRect(0, 0, w, h);
-          targetCtx.drawImage(temp, sidePad, topPad, innerW, innerH, sidePad, topPad, innerW, innerH);
+          c.strokeStyle = '#B8AFA4';
+          c.lineWidth = 3;
+          c.strokeRect(sidePad, topPad, innerW, innerH);
 
-          targetCtx.strokeStyle = '#B8AFA4';
-          targetCtx.lineWidth = 3 * s;
-          targetCtx.strokeRect(sidePad, topPad, innerW, innerH);
+          drawLogoMark(c, w / 2, 112, 118, '#564F4C');
 
-          drawLogoMark(targetCtx, w / 2, 112 * s, 118 * s, '#564F4C');
+          c.textAlign = 'center';
+          c.fillStyle = '#564F4C';
+          c.font = '600 54px "Cormorant Garamond", Georgia, serif';
+          c.fillText('Hans & Keisha', w / 2, h - 165);
 
-          targetCtx.textAlign = 'center';
-          targetCtx.fillStyle = '#564F4C';
-          targetCtx.font = `600 ${Math.round(54 * s)}px "Cormorant Garamond", Georgia, serif`;
-          targetCtx.fillText('Hans & Keisha', w / 2, h - 165 * s);
+          c.fillStyle = '#B8AFA4';
+          c.fillRect(w / 2 - 48, h - 134, 96, 2);
 
-          targetCtx.fillStyle = '#B8AFA4';
-          targetCtx.fillRect(w / 2 - 48 * s, h - 134 * s, 96 * s, 2 * s);
-
-          targetCtx.fillStyle = '#564F4C';
-          targetCtx.font = `600 ${Math.round(23 * s)}px "Montserrat", sans-serif`;
-          targetCtx.fillText('05 DECEMBER 2026', w / 2, h - 92 * s);
-          targetCtx.restore();
-          return;
-        }
-
-        if (frameId === 'full-frame') {
+          c.fillStyle = '#564F4C';
+          c.font = '600 23px "Montserrat", sans-serif';
+          c.fillText('05 DECEMBER 2026', w / 2, h - 92);
+        } else if (frameId === 'full-frame') {
           if (loadedCustomFullFrameImg && loadedCustomFullFrameImg.complete && loadedCustomFullFrameImg.naturalWidth > 0) {
-            targetCtx.drawImage(loadedCustomFullFrameImg, 0, 0, w, h);
+            c.drawImage(loadedCustomFullFrameImg, 0, 0, w, h);
           } else {
-            if (!cachedPlainFullFrame || cachedPlainFullFrame.width !== w) {
-              cachedPlainFullFrame = buildPlainPaletteFullFrame(w, h);
-            }
-            targetCtx.drawImage(cachedPlainFullFrame, 0, 0, w, h);
+            const winX = Math.round(w * 0.095);
+            const winY = Math.round(h * 0.135);
+            const winW = Math.round(w * 0.81);
+            const winH = Math.round(h * 0.775);
+
+            c.fillStyle = '#B8AFA4';
+            c.fillRect(0, 0, w, h);
+
+            c.strokeStyle = '#564F4C';
+            c.lineWidth = 3;
+            c.strokeRect(28, 28, w - 56, h - 56);
+
+            c.clearRect(winX, winY, winW, winH);
+
+            c.strokeStyle = '#564F4C';
+            c.lineWidth = 5;
+            c.strokeRect(winX, winY, winW, winH);
+
+            c.textAlign = 'center';
+            c.fillStyle = '#564F4C';
+
+            c.font = '600 21px "Montserrat", sans-serif';
+            c.fillText('THE HOLY MATRIMONY OF', w / 2, 92);
+
+            c.font = '600 86px "Cormorant Garamond", Georgia, serif';
+            c.fillText('HANS', w * 0.305, 186);
+            c.fillText('KEISHA', w * 0.695, 186);
+
+            c.font = 'italic 500 36px "Cormorant Garamond", Georgia, serif';
+            c.fillText('and', w * 0.485, 178);
+
+            const botY = winY + winH;
+            const dateY = botY + 58;
+            c.font = '600 22px "Montserrat", sans-serif';
+            c.fillText('SATURDAY, 05 DECEMBER 2026', w / 2, dateY);
+
+            const tagText = '#HANSweredprayerofKEI';
+            c.font = 'italic 600 26px "Cormorant Garamond", Georgia, serif';
+            const tagW = c.measureText(tagText).width + 52;
+            const tagH = 42;
+            const tagY = dateY + 20;
+
+            c.fillStyle = '#FFFFFF';
+            c.fillRect(w / 2 - tagW / 2, tagY, tagW, tagH);
+            c.strokeStyle = '#564F4C';
+            c.lineWidth = 2;
+            c.strokeRect(w / 2 - tagW / 2, tagY, tagW, tagH);
+
+            c.fillStyle = '#564F4C';
+            c.fillText(tagText, w / 2, tagY + 29);
           }
         }
+
+        frameOverlayCache[frameId] = off;
+        return off;
       }
 
       // CUSTOM LOGO & GREEN-SCREEN CHROMA KEY PROCESSORS
@@ -1075,10 +1044,12 @@ const DEFAULT_CONFIG = {
       </svg>`;
 
       function loadCustomAssetsFromState() {
+        invalidateFrameCache();
         if (state.customLogoDataUrl) {
           const img = new Image();
           img.onload = () => {
             loadedCustomLogoImg = img;
+            invalidateFrameCache();
             if (els.welcomeMonogramWrap) {
               els.welcomeMonogramWrap.innerHTML = `<img src="${state.customLogoDataUrl}" alt="H&K Monogram" class="h-[64px] w-auto object-contain" />`;
             }
@@ -1093,7 +1064,10 @@ const DEFAULT_CONFIG = {
 
         if (state.customFullFrameDataUrl) {
           const fImg = new Image();
-          fImg.onload = () => { loadedCustomFullFrameImg = fImg; };
+          fImg.onload = () => {
+            loadedCustomFullFrameImg = fImg;
+            invalidateFrameCache();
+          };
           fImg.src = state.customFullFrameDataUrl;
         } else {
           loadedCustomFullFrameImg = null;
@@ -1175,7 +1149,7 @@ const DEFAULT_CONFIG = {
         return c.toDataURL('image/png');
       }
 
-      // HIGH-RES DUAL PHOTO CAPTURE + RELIABLE SINGLE-STREAM VIDEO RECORDING
+      // PHOTO CAPTURE & SMOOTH 30FPS VIDEO RECORDING
       function playShutterFeedback() {
         els.shutterFlash.classList.remove('animate-shutter-flash');
         void els.shutterFlash.offsetWidth;
@@ -1266,7 +1240,6 @@ const DEFAULT_CONFIG = {
         });
       }
 
-      // Single-Stream 720p HD Video Recording
       let holdTimer = null;
       let isRecording = false;
       let recordingStartTime = 0;
@@ -1274,10 +1247,14 @@ const DEFAULT_CONFIG = {
       let activeVideoRecorder = null;
 
       function getSupportedVideoMime() {
+        // Prioritaskan hardware-accelerated H.264/MP4 agar mulus 30 FPS di Android & iPhone
         const candidates = [
+          'video/mp4;codecs=avc1',
           'video/mp4',
+          'video/webm;codecs=h264,opus',
+          'video/webm;codecs=h264',
+          'video/webm;codecs=vp9,opus',
           'video/webm;codecs=vp8,opus',
-          'video/webm;codecs=vp8',
           'video/webm'
         ];
         if (typeof MediaRecorder === 'undefined') return '';
@@ -1290,7 +1267,7 @@ const DEFAULT_CONFIG = {
       }
 
       function createSingleSafeRecorder(targetCanvas, audioTracks, preferredMime) {
-        const stream = targetCanvas.captureStream(24);
+        const stream = targetCanvas.captureStream(30);
         audioTracks.forEach((track) => {
           if (track.readyState === 'live') {
             try { stream.addTrack(track); } catch (e) {}
@@ -1298,9 +1275,9 @@ const DEFAULT_CONFIG = {
         });
 
         const attempts = [
-          preferredMime ? { mimeType: preferredMime, videoBitsPerSecond: 900000 } : null,
+          preferredMime ? { mimeType: preferredMime, videoBitsPerSecond: 2500000 } : null,
           preferredMime ? { mimeType: preferredMime } : null,
-          { videoBitsPerSecond: 900000 },
+          { videoBitsPerSecond: 2500000 },
           {}
         ].filter(Boolean);
 
@@ -1318,8 +1295,20 @@ const DEFAULT_CONFIG = {
           return;
         }
 
-        const hasFrame = state.activeFrame !== 'without-frame';
-        videoRecordCtx.drawImage(hasFrame ? captureFramedCanvas : cleanCanvas, 0, 0, 720, 1280);
+        const recordedFrameId = state.activeFrame;
+        const hasFrame = recordedFrameId !== 'without-frame';
+
+        // Pastikan frameOverlay sudah ter-cache & frame pertama langsung tergambar sebelum start()
+        if (hasFrame) getFrameOverlayCanvas(recordedFrameId);
+        const vid = els.sourceVideo;
+        const hasLiveVideo = !isDemoCamera && vid && vid.readyState >= 2 && vid.videoWidth > 0;
+        renderSceneWithFrame(videoRecordCtx, VID_W, VID_H, recordedFrameId, (tCtx, dx, dy, dw, dh) => {
+          if (hasLiveVideo) {
+            drawVideoToBox(tCtx, vid, dx, dy, dw, dh);
+          } else {
+            drawStudioDemoBackdrop(tCtx, VID_W, VID_H, performance.now());
+          }
+        });
 
         const mimeType = getSupportedVideoMime();
         const audioTracks = mediaStream ? mediaStream.getAudioTracks() : [];
@@ -1347,7 +1336,7 @@ const DEFAULT_CONFIG = {
 
           const durationSec = Math.max(1, Math.round((Date.now() - recordingStartTime) / 1000));
           const { seq, framedFilename, cleanFilename } = nextCaptureNames('video', ext);
-          const thumbDataUrl = makeThumbnailFromCanvas(hasFrame ? captureFramedCanvas : cleanCanvas);
+          const thumbDataUrl = makeThumbnailFromCanvas(videoRecordCanvas);
 
           registerAndUploadDualMoment({
             mediaType: 'video',
@@ -1360,7 +1349,7 @@ const DEFAULT_CONFIG = {
           });
         };
 
-        activeVideoRecorder.start(500);
+        activeVideoRecorder.start(1000);
         isRecording = true;
         recordingStartTime = Date.now();
 
@@ -1455,7 +1444,7 @@ const DEFAULT_CONFIG = {
       els.btnUnifiedShutter.addEventListener('pointerup', handleShutterRelease);
       els.btnUnifiedShutter.addEventListener('pointercancel', handleShutterRelease);
 
-      // GALLERY UPLOAD HANDLER (FULL HD PHOTO + 15MB VIDEO GUARD)
+      // GALLERY UPLOAD HANDLER
       els.btnOpenGallery.addEventListener('click', () => {
         els.galleryFileInput.value = '';
         els.galleryFileInput.click();
@@ -1478,8 +1467,6 @@ const DEFAULT_CONFIG = {
             cClean.width = w;
             cClean.height = h;
             const ctxC = cClean.getContext('2d');
-            ctxC.imageSmoothingEnabled = true;
-            ctxC.imageSmoothingQuality = 'high';
 
             const targetRatio = w / h;
             const srcRatio = img.width / img.height;
@@ -1497,10 +1484,9 @@ const DEFAULT_CONFIG = {
             cFramed.width = w;
             cFramed.height = h;
             const ctxF = cFramed.getContext('2d');
-            ctxF.imageSmoothingEnabled = true;
-            ctxF.imageSmoothingQuality = 'high';
-            ctxF.drawImage(cClean, 0, 0, w, h);
-            compositeSelectedFrame(ctxF, w, h, state.activeFrame);
+            renderSceneWithFrame(ctxF, w, h, state.activeFrame, (tCtx, dx, dy, dw, dh) => {
+              tCtx.drawImage(cClean, 0, 0, w, h, dx, dy, dw, dh);
+            });
 
             const [framedBlob, cleanBlob] = await Promise.all([
               hasFrame ? canvasToBlobPromise(cFramed, 'image/jpeg', 0.92) : Promise.resolve(null),
@@ -1573,7 +1559,7 @@ const DEFAULT_CONFIG = {
         uploadMomentToDrive(entry);
       }
 
-function blobToBase64(blob) {
+      function blobToBase64(blob) {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
@@ -1956,6 +1942,9 @@ function blobToBase64(blob) {
       els.framePills.forEach((btn) => {
         btn.addEventListener('click', () => {
           state.activeFrame = btn.dataset.frame;
+          if (state.activeFrame !== 'without-frame') {
+            getFrameOverlayCanvas(state.activeFrame);
+          }
           saveState();
           refreshAllUI();
         });
@@ -2081,6 +2070,7 @@ function blobToBase64(blob) {
       els.btnResetAdminFrame.addEventListener('click', () => {
         state.customFullFrameDataUrl = '';
         loadedCustomFullFrameImg = null;
+        invalidateFrameCache();
         saveState();
         updateAdminAssetPreviews();
         showToast('Plain Palette Full Frame restored');
@@ -2097,16 +2087,10 @@ function blobToBase64(blob) {
         showToast('Host configuration saved');
       });
 
-      els.btnCopyGasScript.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(els.gasScriptCode.textContent);
-          showToast('Google Apps Script copied');
-        } catch (err) {
-          showToast('Select and copy the script manually');
-        }
-      });
-
       loadCustomAssetsFromState();
+      if (state.activeFrame !== 'without-frame') {
+        getFrameOverlayCanvas(state.activeFrame);
+      }
       updateWideToggleUI();
       refreshAllUI();
 
