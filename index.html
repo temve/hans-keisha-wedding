@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Hans & Keisha — Wedding Camera</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --taupe: #B8AFA4;
+      --espresso: #564F4C;
+      --ivory: #F7F5F2;
+      --dark: #1E1C1B;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background: var(--dark);
+      color: var(--ivory);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    header {
+      background: var(--espresso);
+      color: var(--ivory);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(184, 175, 164, 0.3);
+      z-index: 20;
+    }
+    .brand h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.45rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+    .brand p {
+      font-size: 0.68rem;
+      letter-spacing: 0.18em;
+      color: var(--taupe);
+      text-transform: uppercase;
+    }
+    .icon-btn {
+      background: rgba(184, 175, 164, 0.18);
+      border: 1px solid var(--taupe);
+      color: var(--ivory);
+      padding: 6px 11px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .viewport-wrap {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #121110;
+      overflow: hidden;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    video.mirrored { transform: scaleX(-1); }
+
+    /* Live CSS Frame Overlays */
+    .frame-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: center;
+      transition: all 0.2s ease;
+    }
+    .frame-overlay.frame-logo {
+      padding-bottom: 24px;
+    }
+    .frame-overlay.frame-logo::after {
+      content: "HANS & KEISHA  •  05.12.2026";
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.05rem;
+      letter-spacing: 0.2em;
+      color: var(--ivory);
+      text-shadow: 0 2px 8px rgba(0,0,0,0.65);
+    }
+    .frame-overlay.frame-polaroid {
+      border-top: 18px solid var(--ivory);
+      border-left: 18px solid var(--ivory);
+      border-right: 18px solid var(--ivory);
+      border-bottom: 68px solid var(--ivory);
+    }
+    .frame-overlay.frame-polaroid::after {
+      content: "Hans & Keisha  —  05.12.2026";
+      position: absolute;
+      bottom: -46px;
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: 1.2rem;
+      color: var(--espresso);
+    }
+    .frame-overlay.frame-full {
+      border-top: 26px solid var(--taupe);
+      border-left: 26px solid var(--taupe);
+      border-right: 26px solid var(--taupe);
+      border-bottom: 76px solid var(--taupe);
+      box-shadow: inset 0 0 0 2px var(--espresso);
+    }
+    .frame-overlay.frame-full::after {
+      content: "HANS & KEISHA  •  05 DECEMBER 2026";
+      position: absolute;
+      bottom: -50px;
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 600;
+      font-size: 1.05rem;
+      letter-spacing: 0.16em;
+      color: var(--espresso);
+    }
+
+    .rec-badge {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(86, 79, 76, 0.92);
+      border: 1px solid var(--taupe);
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      display: none;
+      align-items: center;
+      gap: 7px;
+      z-index: 15;
+    }
+    .rec-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #ff4d4d;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+    .controls {
+      background: var(--espresso);
+      padding: 12px 14px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-top: 1px solid rgba(184, 175, 164, 0.3);
+      z-index: 20;
+    }
+    .frame-selector {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .frame-pill {
+      background: transparent;
+      border: 1px solid var(--taupe);
+      color: var(--ivory);
+      padding: 5px 12px;
+      border-radius: 16px;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+    .frame-pill.active {
+      background: var(--taupe);
+      color: var(--espresso);
+      font-weight: 600;
+    }
+    .mode-switch {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .mode-tab {
+      cursor: pointer;
+      opacity: 0.6;
+      padding-bottom: 3px;
+    }
+    .mode-tab.active {
+      opacity: 1;
+      color: var(--taupe);
+      border-bottom: 2px solid var(--taupe);
+      font-weight: 600;
+    }
+    .shutter-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+    }
+    .shutter-btn {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 4px solid var(--taupe);
+      background: var(--ivory);
+      cursor: pointer;
+      transition: transform 0.12s;
+    }
+    .shutter-btn.video-mode { background: #d9534f; }
+    .shutter-btn.recording {
+      border-radius: 18px;
+      transform: scale(0.88);
+    }
+    .toast {
+      position: fixed;
+      bottom: 175px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30, 28, 27, 0.94);
+      border: 1px solid var(--taupe);
+      color: var(--ivory);
+      padding: 9px 16px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      z-index: 50;
+      display: none;
+      text-align: center;
+      max-width: 90%;
+    }
+    /* Modal */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 100;
+    }
+    .modal-card {
+      background: var(--ivory);
+      color: var(--espresso);
+      width: 100%;
+      max-width: 400px;
+      border-radius: 14px;
+      padding: 20px;
+      border: 2px solid var(--taupe);
+    }
+    .modal-card h2 {
+      font-family: 'Cormorant Garamond', serif;
+      margin-bottom: 10px;
+    }
+    .modal-card input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0 14px;
+      border: 1px solid var(--taupe);
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .btn-primary {
+      background: var(--espresso);
+      color: var(--ivory);
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>Hans & Keisha</h1>
+    <p>05 December 2026</p>
+  </div>
+  <button class="icon-btn" onclick="openAdmin()">Admin</button>
+</header>
+
+<div class="viewport-wrap">
+  <div class="rec-badge" id="recBadge"><span class="rec-dot"></span><span id="recTimer">00:15</span></div>
+  <video id="camera" autoplay playsinline muted></video>
+  <div class="frame-overlay" id="frameOverlay"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="controls">
+  <div class="frame-selector" id="frameSelector">
+    <button class="frame-pill active" data-frame="none">No Frame</button>
+    <button class="frame-pill" data-frame="logo">Logo</button>
+    <button class="frame-pill" data-frame="polaroid">Polaroid</button>
+    <button class="frame-pill" data-frame="full">Full Frame</button>
+  </div>
+
+  <div class="mode-switch">
+    <span class="mode-tab active" id="tabPhoto" onclick="setMode('photo')">Photo (HD)</span>
+    <span class="mode-tab" id="tabVideo" onclick="setMode('video')">Video (15s)</span>
+  </div>
+
+  <div class="shutter-row">
+    <button class="icon-btn" onclick="flipCamera()">Flip</button>
+    <button class="shutter-btn" id="shutterBtn" onclick="handleShutter()"></button>
+    <input type="text" id="guestName" placeholder="Your name" style="width:92px;padding:6px 8px;border-radius:14px;border:1px solid var(--taupe);background:rgba(247,245,242,0.12);color:var(--ivory);font-size:0.72rem;" />
+  </div>
+</div>
+
+<!-- Admin Modal -->
+<div class="modal" id="adminModal">
+  <div class="modal-card">
+    <h2>Admin Studio</h2>
+    <p style="font-size:0.78rem;">Google Apps Script Web App URL is pre-embedded for all guests. Override below only if needed:</p>
+    <input type="url" id="scriptUrlInput" placeholder="https://script.google.com/macros/s/.../exec" />
+    <div class="modal-actions">
+      <button class="icon-btn" style="color:var(--espresso);" onclick="closeAdmin()">Cancel</button>
+      <button class="btn-primary" onclick="saveAdminUrl()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxRAGjWghzN_QyqtMSU2CFvPrZ7-4o9eOkd82A5EuIK9fbFgr3IYqSDF1RDwJsS0gyu/exec";
+  const ADMIN_PIN = "051226";
+  const MAX_VIDEO_SECONDS = 15;
+
+  let currentFacingMode = "environment";
+  let currentFrame = "none";
+  let currentMode = "photo";
+  let mediaStream = null;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let recordTimerInterval = null;
+
+  const videoEl = document.getElementById("camera");
+  const overlayEl = document.getElementById("frameOverlay");
+  const shutterBtn = document.getElementById("shutterBtn");
+  const toastEl = document.getElementById("toast");
+
+  function getScriptUrl() {
+    return localStorage.getItem("hk_gas_url") || DEFAULT_SCRIPT_URL;
+  }
+
+  function showToast(msg, duration = 3200) {
+    toastEl.textContent = msg;
+    toastEl.style.display = "block";
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(() => (toastEl.style.display = "none"), duration);
+  }
+
+  async function startCamera() {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+    }
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: currentFacingMode,
+          width: { ideal: 1920, max: 3840 },
+          height: { ideal: 1080, max: 2160 }
+        },
+        audio: true
+      });
+      videoEl.srcObject = mediaStream;
+      videoEl.classList.toggle("mirrored", currentFacingMode === "user");
+    } catch (err) {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: currentFacingMode,
+          width: { ideal: 1920, max: 3840 },
+          height: { ideal: 1080, max: 2160 }
+        },
+        audio: false
+      });
+      videoEl.srcObject = mediaStream;
+      videoEl.classList.toggle("mirrored", currentFacingMode === "user");
+    }
+  }
+
+  function flipCamera() {
+    currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
+    startCamera();
+  }
+
+  document.getElementById("frameSelector").addEventListener("click", (e) => {
+    if (!e.target.dataset.frame) return;
+    document.querySelectorAll(".frame-pill").forEach(b => b.classList.remove("active"));
+    e.target.classList.add("active");
+    currentFrame = e.target.dataset.frame;
+    overlayEl.className = "frame-overlay" + (currentFrame !== "none" ? ` frame-${currentFrame}` : "");
+  });
+
+  function setMode(mode) {
+    if (mediaRecorder && mediaRecorder.state === "recording") return;
+    currentMode = mode;
+    document.getElementById("tabPhoto").classList.toggle("active", mode === "photo");
+    document.getElementById("tabVideo").classList.toggle("active", mode === "video");
+    shutterBtn.classList.toggle("video-mode", mode === "video");
+  }
+
+  function handleShutter() {
+    if (currentMode === "photo") {
+      captureHighResPhoto();
+    } else {
+      toggleVideoRecording();
+    }
+  }
+
+  function sanitizeGuestName() {
+    const raw = document.getElementById("guestName").value.trim() || "Guest";
+    return raw.replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
+
+  // HIGH-RESOLUTION PHOTO CAPTURE + DUAL UPLOAD
+  async function captureHighResPhoto() {
+    const vw = videoEl.videoWidth || 1920;
+    const vh = videoEl.videoHeight || 1080;
+
+    const origCanvas = document.createElement("canvas");
+    origCanvas.width = vw;
+    origCanvas.height = vh;
+    const oCtx = origCanvas.getContext("2d");
+    oCtx.imageSmoothingEnabled = true;
+    oCtx.imageSmoothingQuality = "high";
+
+    if (currentFacingMode === "user") {
+      oCtx.translate(vw, 0);
+      oCtx.scale(-1, 1);
+    }
+    oCtx.drawImage(videoEl, 0, 0, vw, vh);
+    const origDataUrl = origCanvas.toDataURL("image/jpeg", 0.92);
+
+    const stamp = Date.now();
+    const guest = sanitizeGuestName();
+
+    showToast("Uploading HD photo...");
+
+    if (currentFrame === "none") {
+      await uploadToDrive(origDataUrl, "image/jpeg", `${guest}_${stamp}_orig.jpg`, "Original (No Frame)");
+      return;
+    }
+
+    const framedCanvas = document.createElement("canvas");
+    const fCtx = framedCanvas.getContext("2d");
+    fCtx.imageSmoothingEnabled = true;
+    fCtx.imageSmoothingQuality = "high";
+
+    if (currentFrame === "logo") {
+      framedCanvas.width = vw;
+      framedCanvas.height = vh;
+      fCtx.drawImage(origCanvas, 0, 0);
+      const fontSize = Math.round(vw * 0.032);
+      fCtx.font = `600 ${fontSize}px 'Cormorant Garamond', Georgia, serif`;
+      fCtx.fillStyle = "#F7F5F2";
+      fCtx.textAlign = "center";
+      fCtx.shadowColor = "rgba(0,0,0,0.75)";
+      fCtx.shadowBlur = 12;
+      fCtx.fillText("HANS & KEISHA  •  05.12.2026", vw / 2, vh - Math.round(vh * 0.04));
+
+    } else if (currentFrame === "polaroid") {
+      const side = Math.round(vw * 0.055);
+      const bottom = Math.round(vw * 0.19);
+      framedCanvas.width = vw + side * 2;
+      framedCanvas.height = vh + side + bottom;
+
+      fCtx.fillStyle = "#F7F5F2";
+      fCtx.fillRect(0, 0, framedCanvas.width, framedCanvas.height);
+      fCtx.drawImage(origCanvas, side, side, vw, vh);
+
+      const fontSize = Math.round(vw * 0.045);
+      fCtx.font = `italic 600 ${fontSize}px 'Cormorant Garamond', Georgia, serif`;
+      fCtx.fillStyle = "#564F4C";
+      fCtx.textAlign = "center";
+      fCtx.fillText("Hans & Keisha  —  05.12.2026", framedCanvas.width / 2, vh + side + Math.round(bottom * 0.62));
+
+    } else if (currentFrame === "full") {
+      const side = Math.round(vw * 0.065);
+      const bottom = Math.round(vw * 0.18);
+      framedCanvas.width = vw + side * 2;
+      framedCanvas.height = vh + side + bottom;
+
+      fCtx.fillStyle = "#B8AFA4";
+      fCtx.fillRect(0, 0, framedCanvas.width, framedCanvas.height);
+      fCtx.drawImage(origCanvas, side, side, vw, vh);
+
+      fCtx.strokeStyle = "#564F4C";
+      fCtx.lineWidth = Math.max(3, Math.round(vw * 0.004));
+      fCtx.strokeRect(side, side, vw, vh);
+
+      const fontSize = Math.round(vw * 0.038);
+      fCtx.font = `600 ${fontSize}px 'Cormorant Garamond', Georgia, serif`;
+      fCtx.fillStyle = "#564F4C";
+      fCtx.textAlign = "center";
+      fCtx.fillText("HANS & KEISHA  •  05 DECEMBER 2026", framedCanvas.width / 2, vh + side + Math.round(bottom * 0.62));
+    }
+
+    const framedDataUrl = framedCanvas.toDataURL("image/jpeg", 0.92);
+
+    await Promise.all([
+      uploadToDrive(framedDataUrl, "image/jpeg", `${guest}_${stamp}_framed.jpg`, "Framed"),
+      uploadToDrive(origDataUrl, "image/jpeg", `${guest}_${stamp}_orig.jpg`, "Original (No Frame)")
+    ]);
+  }
+
+  // CROSS-PLATFORM MOBILE VIDEO RECORDING (iOS MP4 + Android WebM)
+  function getSupportedVideoMime() {
+    const candidates = [
+      "video/mp4",
+      "video/webm;codecs=vp8,opus",
+      "video/webm;codecs=vp8",
+      "video/webm"
+    ];
+    for (const type of candidates) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    return "";
+  }
+
+  function toggleVideoRecording() {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      stopVideoRecording();
+      return;
+    }
+
+    recordedChunks = [];
+    const mimeType = getSupportedVideoMime();
+    const options = { videoBitsPerSecond: 1500000 };
+    if (mimeType) options.mimeType = mimeType;
+
+    try {
+      mediaRecorder = new MediaRecorder(mediaStream, options);
+    } catch (e) {
+      mediaRecorder = new MediaRecorder(mediaStream);
+    }
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      clearInterval(recordTimerInterval);
+      document.getElementById("recBadge").style.display = "none";
+      shutterBtn.classList.remove("recording");
+
+      const finalMime = mediaRecorder.mimeType || mimeType || "video/mp4";
+      const ext = finalMime.includes("mp4") ? "mp4" : "webm";
+      const blob = new Blob(recordedChunks, { type: finalMime });
+
+      if (!blob || blob.size < 1000) {
+        showToast("Video too short or empty. Please try again.");
+        return;
+      }
+
+      showToast(`Uploading video (${(blob.size / (1024 * 1024)).toFixed(1)} MB)...`, 10000);
+
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const guest = sanitizeGuestName();
+        await uploadToDrive(reader.result, finalMime, `${guest}_${Date.now()}.${ext}`, "Original (No Frame)");
+      };
+      reader.readAsDataURL(blob);
+    };
+
+    mediaRecorder.start(500);
+    shutterBtn.classList.add("recording");
+
+    let remaining = MAX_VIDEO_SECONDS;
+    const badge = document.getElementById("recBadge");
+    const timerText = document.getElementById("recTimer");
+    badge.style.display = "flex";
+    timerText.textContent = `00:${String(remaining).padStart(2, "0")}`;
+
+    recordTimerInterval = setInterval(() => {
+      remaining--;
+      timerText.textContent = `00:${String(Math.max(0, remaining)).padStart(2, "0")}`;
+      if (remaining <= 0) stopVideoRecording();
+    }, 1000);
+  }
+
+  function stopVideoRecording() {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      mediaRecorder.stop();
+    }
+  }
+
+  // UPLOAD TO GOOGLE APPS SCRIPT
+  async function uploadToDrive(dataUrl, mimeType, fileName, folder) {
+    const url = getScriptUrl();
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ data: dataUrl, mimeType, fileName, folder })
+      });
+
+      const result = await response.json();
+      if (result.status === "success") {
+        showToast("Saved to Hans & Keisha's Gallery!");
+      } else {
+        showToast("Upload error: " + (result.message || "Unknown error"), 5000);
+      }
+    } catch (err) {
+      showToast("Network error during upload: " + err.message, 5000);
+    }
+  }
+
+  // ADMIN STUDIO (PIN: 051226)
+  function openAdmin() {
+    const pin = prompt("Enter Admin PIN:");
+    if (pin !== ADMIN_PIN) {
+      if (pin !== null) showToast("Incorrect PIN");
+      return;
+    }
+    document.getElementById("scriptUrlInput").value = getScriptUrl();
+    document.getElementById("adminModal").style.display = "flex";
+  }
+
+  function closeAdmin() {
+    document.getElementById("adminModal").style.display = "none";
+  }
+
+  function saveAdminUrl() {
+    const val = document.getElementById("scriptUrlInput").value.trim();
+    if (val) localStorage.setItem("hk_gas_url", val);
+    else localStorage.removeItem("hk_gas_url");
+    closeAdmin();
+    showToast("Admin configuration updated");
+  }
+
+  startCamera();
+</script>
+</body>
+</html>
