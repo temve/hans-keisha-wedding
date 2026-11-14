@@ -93,21 +93,34 @@
 </head>
 <body class="bg-[#000000] text-[#FFFFFF] flex items-center justify-center">
 
-  <video id="source-video" playsinline muted autoplay class="hidden"></video>
   <input id="gallery-file-input" type="file" accept="image/*,video/*" class="hidden" />
 
   <!-- MAIN MOBILE STUDIO SHELL (9:16 RESPONSIVE VIEWPORT) -->
   <div id="app-shell" class="relative w-full h-full max-w-[460px] bg-[#181615] overflow-hidden flex flex-col justify-between shadow-2xl sm:border-x sm:border-[#564F4C]/40">
 
-    <!-- FULL-BLEED LIVE COMPOSITE CAMERA CANVAS -->
-    <div id="viewfinder-stage" class="relative w-full h-full flex items-center justify-center bg-[#000000] overflow-hidden">
-      <canvas id="composite-canvas" class="w-full h-full object-cover block"></canvas>
+    <!-- HARDWARE-ACCELERATED LIVE CAMERA STAGE -->
+    <div id="viewfinder-stage" class="relative w-full h-full bg-[#181615] overflow-hidden">
+
+      <!-- Native Video Feed Container (Dynamically sized to match active frame window) -->
+      <div id="video-stage-box" class="absolute inset-0 overflow-hidden bg-[#000000] transition-all duration-150">
+        <video id="source-video" playsinline muted autoplay class="w-full h-full object-cover block"></video>
+
+        <!-- Studio Demo Backdrop (Shown only if camera permission is blocked) -->
+        <div id="demo-backdrop" class="hidden absolute inset-0 bg-gradient-to-br from-[#564F4C] via-[#2C2725] to-[#181615] flex-col items-center justify-center text-center px-6">
+          <p class="font-montserrat text-xs font-semibold tracking-[0.18em] text-[#FFFFFF]/80 uppercase">Live Camera Preview</p>
+          <p class="text-xs text-[#B8AFA4] mt-1.5">Grant camera permission or upload from Gallery</p>
+        </div>
+      </div>
+
+      <!-- Static GPU-Composited Frame Overlay -->
+      <img id="live-frame-overlay" src="" alt="" class="hidden pointer-events-none absolute inset-0 w-full h-full object-fill z-10" />
+
       <div id="shutter-flash" class="pointer-events-none absolute inset-0 bg-[#FFFFFF] opacity-0 z-30"></div>
 
       <!-- Camera Permission Banner -->
       <div id="camera-status-pill" class="hidden absolute top-16 left-1/2 -translate-x-1/2 z-20 bg-[#181615]/90 backdrop-blur-md border border-[#B8AFA4]/40 text-[#FFFFFF] text-[11px] px-3.5 py-1.5 rounded-full items-center gap-2 shadow-lg whitespace-nowrap">
         <span class="w-2 h-2 rounded-full bg-[#B8AFA4]"></span>
-        <span id="camera-status-text">Studio Preview Mode — Allow Camera for Live Lens</span>
+        <span id="camera-status-text">Allow Camera for Live Lens</span>
         <button id="btn-retry-camera" type="button" class="underline text-[#B8AFA4] font-semibold ml-1">Enable</button>
       </div>
 
@@ -463,11 +476,11 @@
   <script>
     (() => {
       // =========================================================================
-      // GANTI TEKS DI DALAM TANDA KUTIP DI BAWAH INI DENGAN URL /exec TERBARU ANDA:
+      // GANTI TEKS DI DALAM TANDA KUTIP DI BAWAH INI DENGAN URL /exec AKTIF ANDA:
       const EMBEDDED_GAS_URL = 'https://script.google.com/macros/s/AKfycbzrH0twxkYxtvb_bu2LanqU6743ygzcT0V517ofT0Ff2T5nV7MpXuBR7P13_cL__d4M/exec';
       // =========================================================================
 
-      const STORAGE_KEY = 'hk_wedding_cam_v10';
+      const STORAGE_KEY = 'hk_wedding_cam_v11';
 
       const DEFAULT_CONFIG = {
         gasWebAppUrl: EMBEDDED_GAS_URL,
@@ -499,9 +512,9 @@
         try {
           const raw =
             localStorage.getItem(STORAGE_KEY) ||
+            localStorage.getItem('hk_wedding_cam_v10') ||
             localStorage.getItem('hk_wedding_cam_v9') ||
-            localStorage.getItem('hk_wedding_cam_v8') ||
-            localStorage.getItem('hk_wedding_cam_v7');
+            localStorage.getItem('hk_wedding_cam_v8');
           if (raw) {
             const parsed = JSON.parse(raw);
             state = { ...state, ...parsed };
@@ -513,7 +526,7 @@
           }
         } catch (err) {}
 
-        // Otomatis perbarui URL semua perangkat tamu setiap kali EMBEDDED_GAS_URL diubah di GitHub
+        // Sinkronkan URL /exec terbaru ke semua perangkat tamu secara otomatis
         if (EMBEDDED_GAS_URL && !EMBEDDED_GAS_URL.startsWith('PASTE_')) {
           if (state.lastEmbeddedUrl !== EMBEDDED_GAS_URL || !state.gasWebAppUrl) {
             state.gasWebAppUrl = EMBEDDED_GAS_URL;
@@ -537,8 +550,10 @@
       loadState();
 
       const els = {
+        videoStageBox: document.getElementById('video-stage-box'),
         sourceVideo: document.getElementById('source-video'),
-        canvas: document.getElementById('composite-canvas'),
+        demoBackdrop: document.getElementById('demo-backdrop'),
+        liveFrameOverlay: document.getElementById('live-frame-overlay'),
         shutterFlash: document.getElementById('shutter-flash'),
         cameraStatusPill: document.getElementById('camera-status-pill'),
         btnRetryCamera: document.getElementById('btn-retry-camera'),
@@ -621,16 +636,11 @@
         btnSaveDriveSettings: document.getElementById('btn-save-drive-settings')
       };
 
-      // FULL HD 1080p PHOTO PIPELINE + HARDWARE-ACCELERATED 720p 30FPS VIDEO PIPELINE
+      // OFFSCREEN CANVASES (Dipakai hanya saat foto diambil atau render frame video pasca-rekam)
       const PHOTO_W = 1080;
       const PHOTO_H = 1920;
       const VID_W = 720;
       const VID_H = 1280;
-
-      const canvas = els.canvas;
-      canvas.width = PHOTO_W;
-      canvas.height = PHOTO_H;
-      const ctx = canvas.getContext('2d');
 
       const cleanCanvas = document.createElement('canvas');
       cleanCanvas.width = PHOTO_W;
@@ -642,26 +652,61 @@
       captureFramedCanvas.height = PHOTO_H;
       const captureFramedCtx = captureFramedCanvas.getContext('2d');
 
-      const videoRecordCanvas = document.createElement('canvas');
-      videoRecordCanvas.width = VID_W;
-      videoRecordCanvas.height = VID_H;
-      const videoRecordCtx = videoRecordCanvas.getContext('2d');
-
-      // Offscreen Pre-Cached Static Frame Overlays (Zero per-frame lag)
       const frameOverlayCache = {};
+      const frameOverlayDataUrls = {};
       let loadedCustomLogoImg = null;
       let loadedCustomFullFrameImg = null;
 
       function invalidateFrameCache() {
-        delete frameOverlayCache['logo-frame'];
-        delete frameOverlayCache['polaroid'];
-        delete frameOverlayCache['full-frame'];
+        Object.keys(frameOverlayCache).forEach((k) => delete frameOverlayCache[k]);
+        Object.keys(frameOverlayDataUrls).forEach((k) => delete frameOverlayDataUrls[k]);
       }
 
       let mediaStream = null;
       let facingMode = 'user';
       let isDemoCamera = false;
-      let renderLoopId = null;
+
+      // UPDATE TAMPILAN VIDEO & FRAME OVERLAY (100% HARDWARE GPU, ZERO LAG)
+      function syncLiveViewfinderOverlay() {
+        const frameId = state.activeFrame;
+
+        // Sesuaikan posisi kotak video agar presisi di dalam jendela Polaroid / Full Frame
+        if (frameId === 'polaroid') {
+          els.videoStageBox.style.top = '11.20%';
+          els.videoStageBox.style.left = '5.93%';
+          els.videoStageBox.style.width = '88.15%';
+          els.videoStageBox.style.height = '72.66%';
+        } else if (frameId === 'full-frame') {
+          els.videoStageBox.style.top = '13.50%';
+          els.videoStageBox.style.left = '9.50%';
+          els.videoStageBox.style.width = '81.00%';
+          els.videoStageBox.style.height = '77.50%';
+        } else {
+          els.videoStageBox.style.top = '0%';
+          els.videoStageBox.style.left = '0%';
+          els.videoStageBox.style.width = '100%';
+          els.videoStageBox.style.height = '100%';
+        }
+
+        // Mirror tampilan layar pada kamera depan, tanpa membalik bingkai teks
+        els.sourceVideo.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'none';
+        els.sourceVideo.classList.toggle('object-contain', Boolean(state.wideAngleMode));
+        els.sourceVideo.classList.toggle('object-cover', !state.wideAngleMode);
+
+        if (!frameId || frameId === 'without-frame') {
+          els.liveFrameOverlay.classList.add('hidden');
+          els.liveFrameOverlay.src = '';
+        } else {
+          if (!frameOverlayDataUrls[frameId]) {
+            const ov = getFrameOverlayCanvas(frameId);
+            if (ov) frameOverlayDataUrls[frameId] = ov.toDataURL('image/png');
+          }
+          if (frameOverlayDataUrls[frameId]) {
+            els.liveFrameOverlay.src = frameOverlayDataUrls[frameId];
+            els.liveFrameOverlay.classList.remove('hidden');
+          }
+        }
+      }
 
       function updateWideToggleUI() {
         if (state.wideAngleMode) {
@@ -673,6 +718,7 @@
           els.btnToggleWide.classList.remove('bg-[#FFFFFF]', 'text-[#564F4C]', 'border-[#FFFFFF]');
           els.btnToggleWide.classList.add('bg-[#181615]/80', 'text-[#FFFFFF]', 'border-[#B8AFA4]/40');
         }
+        syncLiveViewfinderOverlay();
       }
 
       async function startCameraStream() {
@@ -710,6 +756,8 @@
 
           els.sourceVideo.srcObject = mediaStream;
           await els.sourceVideo.play();
+          els.demoBackdrop.classList.add('hidden');
+          els.demoBackdrop.classList.remove('flex');
           els.cameraStatusPill.classList.add('hidden');
           els.cameraStatusPill.classList.remove('flex');
         } catch (err) {
@@ -726,34 +774,28 @@
             isDemoCamera = false;
             els.sourceVideo.srcObject = mediaStream;
             await els.sourceVideo.play();
+            els.demoBackdrop.classList.add('hidden');
+            els.demoBackdrop.classList.remove('flex');
             els.cameraStatusPill.classList.add('hidden');
             els.cameraStatusPill.classList.remove('flex');
           } catch (videoErr) {
             isDemoCamera = true;
+            els.demoBackdrop.classList.remove('hidden');
+            els.demoBackdrop.classList.add('flex');
             els.cameraStatusPill.classList.remove('hidden');
             els.cameraStatusPill.classList.add('flex');
           }
         }
 
-        if (!renderLoopId) {
-          startRenderLoop();
-        }
+        syncLiveViewfinderOverlay();
       }
 
-      function drawStudioDemoBackdrop(targetCtx, w, h, t) {
+      function drawStudioDemoBackdrop(targetCtx, w, h) {
         const grad = targetCtx.createLinearGradient(0, 0, w, h);
         grad.addColorStop(0, '#564F4C');
         grad.addColorStop(0.5, '#2C2725');
         grad.addColorStop(1, '#181615');
         targetCtx.fillStyle = grad;
-        targetCtx.fillRect(0, 0, w, h);
-
-        const glowX = w * 0.5 + Math.sin(t * 0.0008) * (w * 0.08);
-        const glowY = h * 0.42 + Math.cos(t * 0.0006) * (h * 0.03);
-        const radial = targetCtx.createRadialGradient(glowX, glowY, 20, glowX, glowY, w * 0.5);
-        radial.addColorStop(0, 'rgba(184, 175, 164, 0.25)');
-        radial.addColorStop(1, 'rgba(24, 22, 21, 0)');
-        targetCtx.fillStyle = radial;
         targetCtx.fillRect(0, 0, w, h);
 
         const s = w / 1080;
@@ -762,9 +804,6 @@
         targetCtx.fillStyle = 'rgba(255, 255, 255, 0.72)';
         targetCtx.font = `600 ${Math.round(32 * s)}px "Montserrat", sans-serif`;
         targetCtx.fillText('LIVE CAMERA PREVIEW', w / 2, h * 0.47);
-        targetCtx.fillStyle = 'rgba(184, 175, 164, 0.85)';
-        targetCtx.font = `400 ${Math.round(27 * s)}px "Plus Jakarta Sans", sans-serif`;
-        targetCtx.fillText('Grant camera permission or upload from Gallery', w / 2, h * 0.505);
         targetCtx.restore();
       }
 
@@ -797,16 +836,17 @@
         }
       }
 
-      // Render a complete frame (video or image source + cached static frame overlay) in 2 fast drawImage calls
       function renderSceneWithFrame(targetCtx, w, h, frameId, drawSourceFn) {
         const s = w / 1080;
         if (frameId === 'polaroid') {
           const sidePad = Math.round(64 * s);
           const topPad = Math.round(215 * s);
           const bottomPad = Math.round(310 * s);
-          const innerW = w - sidePad * 2;
-          const innerH = h - topPad - bottomPad;
-          drawSourceFn(targetCtx, sidePad, topPad, innerW, innerH);
+          drawSourceFn(targetCtx, sidePad, topPad, w - sidePad * 2, h - topPad - bottomPad);
+        } else if (frameId === 'full-frame') {
+          const winX = Math.round(w * 0.095);
+          const winY = Math.round(h * 0.135);
+          drawSourceFn(targetCtx, winX, winY, Math.round(w * 0.81), Math.round(h * 0.775));
         } else {
           drawSourceFn(targetCtx, 0, 0, w, h);
         }
@@ -817,68 +857,6 @@
             targetCtx.drawImage(overlay, 0, 0, w, h);
           }
         }
-      }
-
-      function startRenderLoop() {
-        function renderTick(now) {
-          const vid = els.sourceVideo;
-          const hasLiveVideo = !isDemoCamera && vid && vid.readyState >= 2 && vid.videoWidth > 0 && vid.videoHeight > 0;
-
-          if (isRecording) {
-            // FAST PATH DURING VIDEO RECORDING: Single 720p pass for smooth 30 FPS
-            const drawRecSource = (tCtx, dx, dy, dw, dh) => {
-              if (hasLiveVideo) {
-                drawVideoToBox(tCtx, vid, dx, dy, dw, dh);
-              } else {
-                drawStudioDemoBackdrop(tCtx, VID_W, VID_H, now || 0);
-              }
-            };
-
-            renderSceneWithFrame(videoRecordCtx, VID_W, VID_H, state.activeFrame, drawRecSource);
-
-            // Mirror only the live video area on front camera preview while keeping frame un-mirrored
-            ctx.clearRect(0, 0, PHOTO_W, PHOTO_H);
-            if (hasLiveVideo && facingMode === 'user') {
-              renderSceneWithFrame(ctx, PHOTO_W, PHOTO_H, state.activeFrame, (tCtx, dx, dy, dw, dh) => {
-                tCtx.save();
-                tCtx.translate(dx + dw, dy);
-                tCtx.scale(-1, 1);
-                drawVideoToBox(tCtx, vid, 0, 0, dw, dh);
-                tCtx.restore();
-              });
-            } else {
-              ctx.drawImage(videoRecordCanvas, 0, 0, PHOTO_W, PHOTO_H);
-            }
-          } else {
-            // IDLE / PHOTO-READY PATH (Full 1080x1920)
-            if (hasLiveVideo) {
-              drawVideoToBox(cleanCtx, vid, 0, 0, PHOTO_W, PHOTO_H);
-            } else {
-              drawStudioDemoBackdrop(cleanCtx, PHOTO_W, PHOTO_H, now || 0);
-            }
-
-            renderSceneWithFrame(captureFramedCtx, PHOTO_W, PHOTO_H, state.activeFrame, (tCtx, dx, dy, dw, dh) => {
-              tCtx.drawImage(cleanCanvas, 0, 0, PHOTO_W, PHOTO_H, dx, dy, dw, dh);
-            });
-
-            ctx.clearRect(0, 0, PHOTO_W, PHOTO_H);
-            if (hasLiveVideo && facingMode === 'user') {
-              renderSceneWithFrame(ctx, PHOTO_W, PHOTO_H, state.activeFrame, (tCtx, dx, dy, dw, dh) => {
-                tCtx.save();
-                tCtx.translate(dx + dw, dy);
-                tCtx.scale(-1, 1);
-                tCtx.drawImage(cleanCanvas, 0, 0, PHOTO_W, PHOTO_H, 0, 0, dw, dh);
-                tCtx.restore();
-              });
-            } else {
-              ctx.drawImage(captureFramedCanvas, 0, 0, PHOTO_W, PHOTO_H);
-            }
-          }
-
-          renderLoopId = requestAnimationFrame(renderTick);
-        }
-
-        renderLoopId = requestAnimationFrame(renderTick);
       }
 
       // PRE-CACHED STATIC FRAME OVERLAY BUILDERS
@@ -1050,6 +1028,7 @@
           img.onload = () => {
             loadedCustomLogoImg = img;
             invalidateFrameCache();
+            syncLiveViewfinderOverlay();
             if (els.welcomeMonogramWrap) {
               els.welcomeMonogramWrap.innerHTML = `<img src="${state.customLogoDataUrl}" alt="H&K Monogram" class="h-[64px] w-auto object-contain" />`;
             }
@@ -1067,6 +1046,7 @@
           fImg.onload = () => {
             loadedCustomFullFrameImg = fImg;
             invalidateFrameCache();
+            syncLiveViewfinderOverlay();
           };
           fImg.src = state.customFullFrameDataUrl;
         } else {
@@ -1149,7 +1129,7 @@
         return c.toDataURL('image/png');
       }
 
-      // PHOTO CAPTURE & SMOOTH 30FPS VIDEO RECORDING
+      // DUAL PHOTO CAPTURE & NATIVE 60FPS VIDEO RECORDING
       function playShutterFeedback() {
         els.shutterFlash.classList.remove('animate-shutter-flash');
         void els.shutterFlash.offsetWidth;
@@ -1219,8 +1199,23 @@
 
       async function captureDualPhoto() {
         playShutterFeedback();
+        const vid = els.sourceVideo;
+        const hasLiveVideo = !isDemoCamera && vid && vid.readyState >= 2 && vid.videoWidth > 0;
+
+        if (hasLiveVideo) {
+          drawVideoToBox(cleanCtx, vid, 0, 0, PHOTO_W, PHOTO_H);
+        } else {
+          drawStudioDemoBackdrop(cleanCtx, PHOTO_W, PHOTO_H);
+        }
+
         const hasFrame = state.activeFrame !== 'without-frame';
         const includeClean = !hasFrame || state.dualUpload;
+
+        if (hasFrame) {
+          renderSceneWithFrame(captureFramedCtx, PHOTO_W, PHOTO_H, state.activeFrame, (tCtx, dx, dy, dw, dh) => {
+            tCtx.drawImage(cleanCanvas, 0, 0, PHOTO_W, PHOTO_H, dx, dy, dw, dh);
+          });
+        }
 
         const [framedBlob, cleanBlob] = await Promise.all([
           hasFrame ? canvasToBlobPromise(captureFramedCanvas, 'image/jpeg', 0.92) : Promise.resolve(null),
@@ -1234,12 +1229,15 @@
           mediaType: 'photo',
           seq,
           hasFrame,
+          framedFrameId: state.activeFrame,
+          framedFilename,
           framedFile: framedBlob ? { blob: framedBlob, filename: framedFilename, mimeType: 'image/jpeg' } : null,
           cleanFile: cleanBlob ? { blob: cleanBlob, filename: cleanFilename, mimeType: 'image/jpeg' } : null,
           thumbnail: thumbDataUrl
         });
       }
 
+      // NATIVE HARDWARE STREAM VIDEO RECORDING (100% SMOOTH ON PHONES)
       let holdTimer = null;
       let isRecording = false;
       let recordingStartTime = 0;
@@ -1247,7 +1245,6 @@
       let activeVideoRecorder = null;
 
       function getSupportedVideoMime() {
-        // Prioritaskan hardware-accelerated H.264/MP4 agar mulus 30 FPS di Android & iPhone
         const candidates = [
           'video/mp4;codecs=avc1',
           'video/mp4',
@@ -1266,18 +1263,11 @@
         return '';
       }
 
-      function createSingleSafeRecorder(targetCanvas, audioTracks, preferredMime) {
-        const stream = targetCanvas.captureStream(30);
-        audioTracks.forEach((track) => {
-          if (track.readyState === 'live') {
-            try { stream.addTrack(track); } catch (e) {}
-          }
-        });
-
+      function createNativeStreamRecorder(stream, preferredMime) {
         const attempts = [
-          preferredMime ? { mimeType: preferredMime, videoBitsPerSecond: 2500000 } : null,
+          preferredMime ? { mimeType: preferredMime, videoBitsPerSecond: 3000000 } : null,
           preferredMime ? { mimeType: preferredMime } : null,
-          { videoBitsPerSecond: 2500000 },
+          { videoBitsPerSecond: 3000000 },
           {}
         ].filter(Boolean);
 
@@ -1289,32 +1279,41 @@
         return null;
       }
 
-      function startSingleVideoRecording() {
+      function capturePosterThumbnail(frameId) {
+        const poster = document.createElement('canvas');
+        poster.width = 360;
+        poster.height = 640;
+        const pCtx = poster.getContext('2d');
+        const vid = els.sourceVideo;
+        const hasLiveVideo = !isDemoCamera && vid && vid.readyState >= 2 && vid.videoWidth > 0;
+
+        renderSceneWithFrame(pCtx, 360, 640, frameId, (tCtx, dx, dy, dw, dh) => {
+          if (hasLiveVideo) {
+            drawVideoToBox(tCtx, vid, dx, dy, dw, dh);
+          } else {
+            drawStudioDemoBackdrop(tCtx, 360, 640);
+          }
+        });
+        return poster.toDataURL('image/jpeg', 0.78);
+      }
+
+      function startNativeVideoRecording() {
         if (typeof MediaRecorder === 'undefined') {
           showToast('Video recording not supported in this browser');
+          return;
+        }
+        if (!mediaStream || isDemoCamera) {
+          showToast('Please allow camera access to record video');
           return;
         }
 
         const recordedFrameId = state.activeFrame;
         const hasFrame = recordedFrameId !== 'without-frame';
-
-        // Pastikan frameOverlay sudah ter-cache & frame pertama langsung tergambar sebelum start()
-        if (hasFrame) getFrameOverlayCanvas(recordedFrameId);
-        const vid = els.sourceVideo;
-        const hasLiveVideo = !isDemoCamera && vid && vid.readyState >= 2 && vid.videoWidth > 0;
-        renderSceneWithFrame(videoRecordCtx, VID_W, VID_H, recordedFrameId, (tCtx, dx, dy, dw, dh) => {
-          if (hasLiveVideo) {
-            drawVideoToBox(tCtx, vid, dx, dy, dw, dh);
-          } else {
-            drawStudioDemoBackdrop(tCtx, VID_W, VID_H, performance.now());
-          }
-        });
-
+        const thumbDataUrl = capturePosterThumbnail(recordedFrameId);
         const mimeType = getSupportedVideoMime();
-        const audioTracks = mediaStream ? mediaStream.getAudioTracks() : [];
         const chunks = [];
 
-        activeVideoRecorder = createSingleSafeRecorder(videoRecordCanvas, audioTracks, mimeType);
+        activeVideoRecorder = createNativeStreamRecorder(mediaStream, mimeType);
         if (!activeVideoRecorder) {
           showToast('Unable to start video recorder on this device');
           return;
@@ -1327,23 +1326,26 @@
         activeVideoRecorder.onstop = () => {
           const actualMime = (activeVideoRecorder && activeVideoRecorder.mimeType) || mimeType || 'video/mp4';
           const ext = actualMime.includes('mp4') ? 'mp4' : 'webm';
-          const videoBlob = chunks.length ? new Blob(chunks, { type: actualMime }) : null;
+          const cleanVideoBlob = chunks.length ? new Blob(chunks, { type: actualMime }) : null;
 
-          if (!videoBlob || videoBlob.size < 1024) {
+          if (!cleanVideoBlob || cleanVideoBlob.size < 1024) {
             showToast('Hold slightly longer to record a video clip');
             return;
           }
 
           const durationSec = Math.max(1, Math.round((Date.now() - recordingStartTime) / 1000));
           const { seq, framedFilename, cleanFilename } = nextCaptureNames('video', ext);
-          const thumbDataUrl = makeThumbnailFromCanvas(videoRecordCanvas);
 
+          // Video asli langsung dikirim ke folder "Original (No Frame)" di Google Drive
+          // Versi ber-frame akan dirender mulus saat tamu menekan "Save Framed" di Moments
           registerAndUploadDualMoment({
             mediaType: 'video',
             seq,
             hasFrame,
-            framedFile: hasFrame ? { blob: videoBlob, filename: framedFilename, mimeType: actualMime } : null,
-            cleanFile: !hasFrame ? { blob: videoBlob, filename: cleanFilename, mimeType: actualMime } : null,
+            framedFrameId: recordedFrameId,
+            framedFilename,
+            framedFile: null,
+            cleanFile: { blob: cleanVideoBlob, filename: cleanFilename, mimeType: actualMime },
             thumbnail: thumbDataUrl,
             durationText: formatTimeSec(durationSec)
           });
@@ -1364,12 +1366,12 @@
           const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
           els.recordingTimer.textContent = `${formatTimeSec(elapsed)} / 00:20`;
           if (elapsed >= 20) {
-            stopSingleVideoRecording();
+            stopNativeVideoRecording();
           }
         }, 250);
       }
 
-      function stopSingleVideoRecording() {
+      function stopNativeVideoRecording() {
         if (!isRecording) return;
         isRecording = false;
         clearInterval(recordingTimerInterval);
@@ -1384,6 +1386,123 @@
 
         if (activeVideoRecorder && activeVideoRecorder.state === 'recording') {
           try { activeVideoRecorder.stop(); } catch (e) {}
+        }
+      }
+
+      // ON-DEMAND POST-CAPTURE VIDEO FRAMER (Berjalan setelah kamera berhenti merekam)
+      const renderingVideoIds = new Set();
+
+      async function renderAndDownloadFramedVideo(momentId, btnEl) {
+        const mem = sessionFiles.get(momentId);
+        const entry = state.moments.find((m) => m.id === momentId);
+        if (!mem || !mem.clean || !mem.clean.url || !entry) {
+          showToast('Video file unavailable in current session');
+          return;
+        }
+
+        if (mem.framed && mem.framed.url) {
+          downloadFileObject(mem.framed);
+          return;
+        }
+
+        if (renderingVideoIds.has(momentId)) return;
+        renderingVideoIds.add(momentId);
+        if (btnEl) {
+          btnEl.disabled = true;
+          btnEl.textContent = 'Rendering...';
+        }
+        showToast('Applying frame to your video (1x playback)...');
+
+        try {
+          const offVideo = document.createElement('video');
+          offVideo.src = mem.clean.url;
+          offVideo.muted = true;
+          offVideo.playsInline = true;
+          offVideo.preload = 'auto';
+
+          await new Promise((resolve, reject) => {
+            offVideo.onloadedmetadata = resolve;
+            offVideo.onerror = () => reject(new Error('Cannot decode video'));
+          });
+
+          const rCanvas = document.createElement('canvas');
+          rCanvas.width = VID_W;
+          rCanvas.height = VID_H;
+          const rCtx = rCanvas.getContext('2d');
+
+          const frameId = entry.framedFrameId || 'logo-frame';
+          getFrameOverlayCanvas(frameId);
+
+          const stream = rCanvas.captureStream(30);
+          try {
+            const vidStream = offVideo.captureStream ? offVideo.captureStream() : (offVideo.mozCaptureStream ? offVideo.mozCaptureStream() : null);
+            if (vidStream) {
+              vidStream.getAudioTracks().forEach((t) => stream.addTrack(t));
+            }
+          } catch (audioErr) {}
+
+          const mimeType = getSupportedVideoMime();
+          const chunks = [];
+          const recorder = createNativeStreamRecorder(stream, mimeType);
+          if (!recorder) throw new Error('Video encoder unavailable');
+
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) chunks.push(e.data);
+          };
+
+          const finishedPromise = new Promise((resolve) => {
+            recorder.onstop = resolve;
+          });
+
+          // Render frame pertama sebelum start
+          renderSceneWithFrame(rCtx, VID_W, VID_H, frameId, (tCtx, dx, dy, dw, dh) => {
+            drawVideoToBox(tCtx, offVideo, dx, dy, dw, dh);
+          });
+
+          recorder.start(500);
+          await offVideo.play();
+
+          await new Promise((resolve) => {
+            function drawLoop() {
+              if (offVideo.ended || offVideo.paused) {
+                resolve();
+                return;
+              }
+              renderSceneWithFrame(rCtx, VID_W, VID_H, frameId, (tCtx, dx, dy, dw, dh) => {
+                drawVideoToBox(tCtx, offVideo, dx, dy, dw, dh);
+              });
+              requestAnimationFrame(drawLoop);
+            }
+            offVideo.onended = resolve;
+            requestAnimationFrame(drawLoop);
+          });
+
+          if (recorder.state === 'recording') recorder.stop();
+          await finishedPromise;
+          offVideo.src = '';
+
+          const actualMime = recorder.mimeType || mimeType || 'video/mp4';
+          const ext = actualMime.includes('mp4') ? 'mp4' : 'webm';
+          const framedBlob = new Blob(chunks, { type: actualMime });
+          const finalName = (entry.framedFilename || `${entry.title} (Framed)`).replace(/\.(mp4|webm)$/i, '') + `.${ext}`;
+
+          mem.framed = {
+            blob: framedBlob,
+            filename: finalName,
+            mimeType: actualMime,
+            url: URL.createObjectURL(framedBlob)
+          };
+
+          downloadFileObject(mem.framed);
+        } catch (err) {
+          showToast('Framed render unsupported on this browser — downloading original');
+          downloadFileObject(mem.clean);
+        } finally {
+          renderingVideoIds.delete(momentId);
+          if (btnEl) {
+            btnEl.disabled = false;
+            btnEl.textContent = 'Save Framed';
+          }
         }
       }
 
@@ -1422,7 +1541,7 @@
         holdTimer = setTimeout(() => {
           holdTimer = null;
           clearWindowSelection();
-          startSingleVideoRecording();
+          startNativeVideoRecording();
         }, 320);
       });
 
@@ -1435,7 +1554,7 @@
           els.shutterDisc.style.transform = 'scale(1)';
           captureDualPhoto();
         } else if (isRecording) {
-          stopSingleVideoRecording();
+          stopNativeVideoRecording();
         } else {
           els.shutterDisc.style.transform = 'scale(1)';
         }
@@ -1501,6 +1620,8 @@
               mediaType: 'photo',
               seq,
               hasFrame,
+              framedFrameId: state.activeFrame,
+              framedFilename,
               framedFile: framedBlob ? { blob: framedBlob, filename: framedFilename, mimeType: 'image/jpeg' } : null,
               cleanFile: cleanBlob ? { blob: cleanBlob, filename: cleanFilename, mimeType: 'image/jpeg' } : null,
               thumbnail: thumb
@@ -1512,11 +1633,13 @@
             showToast('Gallery video must be under 15 MB for Drive sync');
             return;
           }
-          const { seq, cleanFilename } = nextCaptureNames('video', ext);
+          const { seq, framedFilename, cleanFilename } = nextCaptureNames('video', ext);
           registerAndUploadDualMoment({
             mediaType: 'video',
             seq,
-            hasFrame: false,
+            hasFrame,
+            framedFrameId: state.activeFrame,
+            framedFilename,
             framedFile: null,
             cleanFile: { blob: file, filename: cleanFilename, mimeType: file.type || 'video/mp4' },
             thumbnail: '',
@@ -1526,7 +1649,7 @@
       });
 
       // MOMENTS REGISTRY & GOOGLE DRIVE SYNC QUEUE
-      function registerAndUploadDualMoment({ mediaType, seq, hasFrame, framedFile, cleanFile, thumbnail, durationText }) {
+      function registerAndUploadDualMoment({ mediaType, seq, hasFrame, framedFrameId, framedFilename, framedFile, cleanFile, thumbnail, durationText }) {
         const id = `m_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const guest = sanitizeGuestName(state.guestName);
         const title = `${guest} - ${mediaType === 'photo' ? 'Photo' : 'Video'} ${seq}`;
@@ -1543,7 +1666,8 @@
           mediaType,
           seq,
           hasFrame,
-          framedFilename: framedFile ? framedFile.filename : '',
+          framedFrameId: framedFrameId || 'without-frame',
+          framedFilename: framedFilename || (framedFile ? framedFile.filename : ''),
           cleanFilename: cleanFile ? cleanFile.filename : '',
           thumbnail,
           durationText: durationText || '',
@@ -1581,7 +1705,7 @@
         entry.progress = 18;
         refreshAllUI();
 
-        if (gasEndpoint && mem) {
+        if (gasEndpoint && !gasEndpoint.startsWith('PASTE_') && mem) {
           try {
             const filesToSend = [];
             if (mem.framed && mem.framed.blob) filesToSend.push({ ...mem.framed, variant: 'framed' });
@@ -1635,18 +1759,11 @@
         }
       }
 
-      function triggerMomentDownload(momentId, variant) {
-        const mem = sessionFiles.get(momentId);
-        if (!mem) {
-          showToast('File available in Google Drive folder');
-          return;
-        }
-        const target = variant === 'clean' ? (mem.clean || mem.framed) : (mem.framed || mem.clean);
+      function downloadFileObject(target) {
         if (!target || !target.url) {
-          showToast('File variant unavailable');
+          showToast('File unavailable');
           return;
         }
-
         const a = document.createElement('a');
         a.href = target.url;
         a.download = target.filename;
@@ -1654,6 +1771,23 @@
         a.click();
         document.body.removeChild(a);
         showToast(`Downloading ${target.filename}`);
+      }
+
+      function triggerMomentDownload(momentId, variant, btnEl) {
+        const mem = sessionFiles.get(momentId);
+        const entry = state.moments.find((m) => m.id === momentId);
+        if (!mem) {
+          showToast('File available in Google Drive folder');
+          return;
+        }
+
+        if (entry && entry.mediaType === 'video' && variant === 'framed' && entry.hasFrame) {
+          renderAndDownloadFramedVideo(momentId, btnEl);
+          return;
+        }
+
+        const target = variant === 'clean' ? (mem.clean || mem.framed) : (mem.framed || mem.clean);
+        downloadFileObject(target);
       }
 
       async function downloadAllSessionFiles() {
@@ -1672,12 +1806,7 @@
 
         showToast(`Downloading ${queue.length} files...`);
         for (const item of queue) {
-          const a = document.createElement('a');
-          a.href = item.url;
-          a.download = item.filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+          downloadFileObject(item);
           await sleep(280);
         }
       }
@@ -1689,7 +1818,7 @@
         els.momentsGuestLabel.textContent = name;
 
         const uploadingCount = state.moments.filter((m) => m.status === 'uploading').length;
-        const driveLive = Boolean((state.gasWebAppUrl || '').trim());
+        const driveLive = Boolean((state.gasWebAppUrl || '').trim() && !state.gasWebAppUrl.startsWith('PASTE_'));
 
         if (uploadingCount > 0) {
           els.syncStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-[#FFFFFF] animate-ping';
@@ -1790,7 +1919,7 @@
             btnFramed.type = 'button';
             btnFramed.className = 'btn-press px-2.5 py-1.5 rounded-lg bg-[#564F4C] text-[#FFFFFF] text-[10px] font-semibold';
             btnFramed.textContent = 'Save Framed';
-            btnFramed.onclick = () => triggerMomentDownload(m.id, 'framed');
+            btnFramed.onclick = () => triggerMomentDownload(m.id, 'framed', btnFramed);
             actions.appendChild(btnFramed);
           }
 
@@ -1801,7 +1930,7 @@
               ? 'btn-press px-2.5 py-1.5 rounded-lg border border-[#B8AFA4] text-[#564F4C] text-[10px] font-semibold'
               : 'btn-press px-2.5 py-1.5 rounded-lg bg-[#564F4C] text-[#FFFFFF] text-[10px] font-semibold';
             btnClean.textContent = m.hasFrame ? 'No Frame' : 'Save';
-            btnClean.onclick = () => triggerMomentDownload(m.id, 'clean');
+            btnClean.onclick = () => triggerMomentDownload(m.id, 'clean', btnClean);
             actions.appendChild(btnClean);
           }
 
@@ -1833,12 +1962,12 @@
           const right = document.createElement('div');
           right.className = 'flex items-center gap-1.5 shrink-0';
 
-          if (m.hasFrame) {
+          if (m.hasFrame && m.mediaType === 'photo') {
             const bF = document.createElement('button');
             bF.type = 'button';
             bF.className = 'btn-press px-2.5 py-1.5 rounded-lg bg-[#564F4C] text-[#FFFFFF] text-[10px] font-semibold';
             bF.textContent = 'Framed';
-            bF.onclick = () => triggerMomentDownload(m.id, 'framed');
+            bF.onclick = () => triggerMomentDownload(m.id, 'framed', bF);
             right.appendChild(bF);
           }
 
@@ -1847,7 +1976,7 @@
             bC.type = 'button';
             bC.className = 'btn-press px-2.5 py-1.5 rounded-lg border border-[#B8AFA4] text-[#564F4C] text-[10px] font-semibold';
             bC.textContent = 'Clean';
-            bC.onclick = () => triggerMomentDownload(m.id, 'clean');
+            bC.onclick = () => triggerMomentDownload(m.id, 'clean', bC);
             right.appendChild(bC);
           }
 
@@ -1942,10 +2071,8 @@
       els.framePills.forEach((btn) => {
         btn.addEventListener('click', () => {
           state.activeFrame = btn.dataset.frame;
-          if (state.activeFrame !== 'without-frame') {
-            getFrameOverlayCanvas(state.activeFrame);
-          }
           saveState();
+          syncLiveViewfinderOverlay();
           refreshAllUI();
         });
       });
@@ -2045,6 +2172,7 @@
         loadedCustomLogoImg = null;
         saveState();
         loadCustomAssetsFromState();
+        syncLiveViewfinderOverlay();
         updateAdminAssetPreviews();
         showToast('Default H&K Monogram restored');
       });
@@ -2060,6 +2188,7 @@
           state.activeFrame = 'full-frame';
           saveState();
           loadCustomAssetsFromState();
+          syncLiveViewfinderOverlay();
           updateAdminAssetPreviews();
           refreshAllUI();
           showToast('Custom Full Frame uploaded & green screen keyed out');
@@ -2072,6 +2201,7 @@
         loadedCustomFullFrameImg = null;
         invalidateFrameCache();
         saveState();
+        syncLiveViewfinderOverlay();
         updateAdminAssetPreviews();
         showToast('Plain Palette Full Frame restored');
       });
@@ -2088,9 +2218,7 @@
       });
 
       loadCustomAssetsFromState();
-      if (state.activeFrame !== 'without-frame') {
-        getFrameOverlayCanvas(state.activeFrame);
-      }
+      syncLiveViewfinderOverlay();
       updateWideToggleUI();
       refreshAllUI();
 
